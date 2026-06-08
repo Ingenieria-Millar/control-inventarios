@@ -1,8 +1,0 @@
-# Render Blueprint — despliega el prototipo como sitio estático
-# Documentación: https://render.com/docs/blueprint-spec
-services:
-  - type: web
-    name: nexo-retail-demo
-    runtime: static
-    buildCommand: "echo Sin paso de build necesario"
-    staticPublishPath: ./app
