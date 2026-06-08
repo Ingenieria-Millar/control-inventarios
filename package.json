@@ -1,0 +1,151 @@
+// db.js — Capa de datos con persistencia en archivo JSON (sin dependencias nativas)
+const fs = require('fs');
+const path = require('path');
+
+// Ruta configurable (en Render con disco persistente, define DB_PATH al disco montado)
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'nexo.json');
+
+const seedProducts = [
+  { name:'iPhone 15 128GB', sku:'APL-I15-128', brand:'Apple', category:'Celulares', emoji:'📱', price:4299900, cost:3150000, stock:8,  stock_min:5,  device:1, compat:[] },
+  { name:'Samsung Galaxy S24', sku:'SAM-S24-256', brand:'Samsung', category:'Celulares', emoji:'📱', price:3899900, cost:2820000, stock:3,  stock_min:5,  device:1, compat:[] },
+  { name:'Xiaomi Redmi Note 13', sku:'XIA-RN13', brand:'Xiaomi', category:'Celulares', emoji:'📱', price:1099900, cost:720000,  stock:14, stock_min:6,  device:1, compat:[] },
+  { name:'Motorola Edge 50', sku:'MOT-E50', brand:'Motorola', category:'Celulares', emoji:'📱', price:1599900, cost:1100000, stock:0,  stock_min:4,  device:1, compat:[] },
+  { name:'Cargador USB-C 30W', sku:'ACC-CHG-30', brand:'Genérico', category:'Cargadores', emoji:'🔌', price:79900, cost:38000, stock:42, stock_min:15, device:0, compat:[1,2,3,4] },
+  { name:'AirPods Pro 2', sku:'APL-APP2', brand:'Apple', category:'Audio', emoji:'🎧', price:899900, cost:620000, stock:6, stock_min:4, device:0, compat:[1] },
+  { name:'Vidrio templado iPhone 15', sku:'ACC-VT-I15', brand:'Genérico', category:'Protección', emoji:'🛡️', price:29900, cost:9000, stock:55, stock_min:20, device:0, compat:[1] },
+  { name:'Funda silicona iPhone 15', sku:'ACC-FN-I15', brand:'Genérico', category:'Protección', emoji:'📲', price:39900, cost:14000, stock:4, stock_min:10, device:0, compat:[1] },
+  { name:'Vidrio templado Galaxy S24', sku:'ACC-VT-S24', brand:'Genérico', category:'Protección', emoji:'🛡️', price:27900, cost:8500, stock:30, stock_min:15, device:0, compat:[2] },
+  { name:'Funda Galaxy S24', sku:'ACC-FN-S24', brand:'Genérico', category:'Protección', emoji:'📲', price:35900, cost:13000, stock:18, stock_min:10, device:0, compat:[2] },
+  { name:'Audífonos Galaxy Buds', sku:'SAM-BUDS', brand:'Samsung', category:'Audio', emoji:'🎧', price:349900, cost:260000, stock:9, stock_min:4, device:0, compat:[2,3] },
+  { name:'Power Bank 20.000mAh', sku:'ACC-PB-20', brand:'Genérico', category:'Energía', emoji:'🔋', price:129900, cost:70000, stock:22, stock_min:8, device:0, compat:[1,2,3,4] },
+  { name:'Vidrio templado Redmi 13', sku:'ACC-VT-RN13', brand:'Genérico', category:'Protección', emoji:'🛡️', price:24900, cost:7500, stock:2, stock_min:12, device:0, compat:[3] },
+  { name:'Cable USB-C a Lightning', sku:'ACC-CBL-CL', brand:'Apple', category:'Cargadores', emoji:'🔌', price:89900, cost:45000, stock:16, stock_min:8, device:0, compat:[1] }
+];
+
+let data = { products: [], sales: [], movements: [], counters: { product:0, sale:0, movement:0 } };
+
+function load(){
+  try{
+    if(fs.existsSync(DB_PATH)){
+      data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    }else{
+      seed(); save();
+      console.log('Base de datos inicializada con datos de ejemplo.');
+    }
+  }catch(e){
+    console.error('Error leyendo la base de datos, se reinicializa:', e.message);
+    seed(); save();
+  }
+}
+function seed(){
+  data = { products: [], sales: [], movements: [], counters: { product:0, sale:0, movement:0 } };
+  seedProducts.forEach(p => createProduct(p, true));
+}
+function save(){
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive:true });
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+}
+function nextId(key){ data.counters[key] = (data.counters[key]||0)+1; return data.counters[key]; }
+
+// ---- Productos ----
+function listProducts(){ return data.products; }
+function getProduct(id){ return data.products.find(p => p.id === id); }
+function createProduct(input, skipSave){
+  const now = new Date().toISOString();
+  const p = {
+    id: nextId('product'),
+    sku: input.sku || '',
+    barcode: input.barcode || '',
+    name: input.name,
+    brand: input.brand || '',
+    category: input.category || '',
+    type: input.type || (input.device ? 'dispositivo' : 'accesorio'),
+    emoji: input.emoji || (input.device ? '📱' : '📦'),
+    price: Number(input.price) || 0,
+    cost: Number(input.cost) || 0,
+    stock: Number(input.stock) || 0,
+    stock_min: Number(input.stock_min) || 0,
+    device: input.device ? 1 : 0,
+    compat: Array.isArray(input.compat) ? input.compat : [],
+    created_at: now, updated_at: now
+  };
+  data.products.push(p);
+  if(!skipSave) save();
+  return p;
+}
+function updateProduct(id, input){
+  const p = getProduct(id); if(!p) return null;
+  ['sku','barcode','name','brand','category','type','emoji'].forEach(f => { if(input[f] !== undefined) p[f] = input[f]; });
+  ['price','cost','stock','stock_min'].forEach(f => { if(input[f] !== undefined) p[f] = Number(input[f]) || 0; });
+  if(input.device !== undefined) p.device = input.device ? 1 : 0;
+  if(input.compat !== undefined) p.compat = Array.isArray(input.compat) ? input.compat : [];
+  p.updated_at = new Date().toISOString();
+  save(); return p;
+}
+function deleteProduct(id){
+  const i = data.products.findIndex(p => p.id === id);
+  if(i < 0) return false;
+  data.products.splice(i,1); save(); return true;
+}
+
+// ---- Movimientos (kardex simple) ----
+function addMovement(product_id, type, qty, ref){
+  data.movements.push({ id: nextId('movement'), product_id, type, qty, ref: ref||'', created_at: new Date().toISOString() });
+}
+function listMovements(product_id){
+  return data.movements.filter(m => !product_id || m.product_id === product_id);
+}
+
+// ---- Ventas ----
+function listSales(){ return data.sales; }
+function createSale(input){
+  const lines = [];
+  for(const it of input.items){
+    const p = getProduct(Number(it.product_id));
+    if(!p) throw { code:'PRODUCTO_NO_EXISTE', message:`El producto ${it.product_id} no existe` };
+    const qty = Number(it.qty) || 0;
+    if(qty <= 0) throw { code:'CANTIDAD_INVALIDA', message:'Cantidad inválida' };
+    if(p.stock < qty) throw { code:'STOCK_INSUFICIENTE', message:`Stock insuficiente de ${p.name} (disponible: ${p.stock})` };
+    lines.push({ p, qty });
+  }
+  const id = nextId('sale');
+  let bruto = 0; const items = [];
+  for(const l of lines){
+    l.p.stock -= l.qty; l.p.updated_at = new Date().toISOString();
+    addMovement(l.p.id, 'venta', -l.qty, 'VTA-' + id);
+    const total = l.p.price * l.qty; bruto += total;
+    items.push({ product_id: l.p.id, name: l.p.name, price: l.p.price, qty: l.qty, total });
+  }
+  const base = Math.round(bruto / 1.19);
+  const iva = bruto - base;
+  const sale = {
+    id, numero: 'F-' + String(id).padStart(5,'0'), fecha: new Date().toISOString(),
+    subtotal: base, iva, total: bruto,
+    pay_method: input.pay_method || 'efectivo',
+    customer: input.customer || 'Consumidor final',
+    items, created_at: new Date().toISOString()
+  };
+  data.sales.push(sale); save(); return sale;
+}
+
+// ---- Dashboard ----
+function dashboard(){
+  const today = new Date().toISOString().slice(0,10);
+  const todaySales = data.sales.filter(s => (s.fecha||'').slice(0,10) === today);
+  const ventasHoy = todaySales.reduce((a,s) => a + s.total, 0);
+  const baseHoy = todaySales.reduce((a,s) => a + s.subtotal, 0);
+  let costoHoy = 0;
+  todaySales.forEach(s => s.items.forEach(it => { const p = getProduct(it.product_id); costoHoy += (p ? p.cost : 0) * it.qty; }));
+  const lowStock = data.products.filter(p => p.stock < p.stock_min);
+  return {
+    ventasHoy,
+    utilidad: baseHoy - costoHoy,
+    ticketPromedio: todaySales.length ? Math.round(ventasHoy / todaySales.length) : 0,
+    ventasCount: todaySales.length,
+    productosCount: data.products.length,
+    lowStockCount: lowStock.length
+  };
+}
+
+load();
+module.exports = { listProducts, getProduct, createProduct, updateProduct, deleteProduct, listSales, createSale, listMovements, dashboard };
