@@ -476,7 +476,48 @@ function buildInsights(products, sales, from, to){
 
 // ---------- App ----------
 const app = express();
-app.use(express.json());
+app.disable('x-powered-by');
+
+// ----- CORS: seguro por defecto (mismo origen). Configurable con CORS_ORIGINS (lista separada por comas, o *) -----
+const CORS_ORIGINS = (process.env.CORS_ORIGINS||'').split(',').map(s=>s.trim()).filter(Boolean);
+const corsAllowAll = CORS_ORIGINS.includes('*');
+app.use((req,res,next)=>{
+  const origin = req.headers.origin;
+  if(origin && (corsAllowAll || CORS_ORIGINS.includes(origin))){
+    res.setHeader('Access-Control-Allow-Origin', corsAllowAll ? '*' : origin);
+    res.setHeader('Vary','Origin');
+    res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization');
+    res.setHeader('Access-Control-Max-Age','600');
+    if(!corsAllowAll) res.setHeader('Access-Control-Allow-Credentials','true');
+  }
+  if(req.method==='OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+// ----- Cabeceras de seguridad -----
+app.use((req,res,next)=>{
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('X-Frame-Options','DENY');
+  res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy','geolocation=(), microphone=(), camera=(), payment=()');
+  res.setHeader('Strict-Transport-Security','max-age=15552000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "img-src 'self' data:",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self'"
+  ].join('; '));
+  next();
+});
+
+app.use(express.json({ limit: '2mb' }));
 const api = express.Router();
 
 api.get('/health', (req,res)=>res.json({ ok:true, persistencia: USE_PG?'postgres':'json', ts:new Date().toISOString() }));
