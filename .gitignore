@@ -17,3 +17,6 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Config local de Claude / preview (contiene ajustes y seeds de prueba)
+.claude/
