@@ -1583,49 +1583,115 @@ async function cfGo(){
 /* ---------- EMPRESAS ---------- */
 let _empresas=[]; let empEstado='todas';
 function setEmpEstado(e){ empEstado=e; views.empresas(); }
+let _empresaSel=null; let _detBranches=[];
+function tenantEstado(t){
+  if(t.status!=='activo') return { label:(t.dias_restantes!=null&&t.dias_restantes<0?'Vencida':'Suspendida'), cls:'out', color:(t.dias_restantes!=null&&t.dias_restantes<0?'var(--danger)':'var(--amber)') };
+  if(t.dias_restantes!=null&&t.dias_restantes<0) return { label:'Vencida', cls:'out', color:'var(--danger)' };
+  if(t.dias_restantes!=null&&t.dias_restantes<=7) return { label:'Por vencer', cls:'low', color:'var(--amber)' };
+  return { label:'Activa', cls:'ok', color:'var(--emerald)' };
+}
 views.empresas=async function(){
+  _empresaSel=null;
   vp().innerHTML='<div class="view"><p style="color:var(--muted)">Cargando…</p></div>';
   try{ _empresas=await API.get('/tenants'); }catch(e){ _empresas=[]; }
   window._tenants=_empresas;
-  const act=_empresas.filter(t=>t.status==='activo').length, ina=_empresas.length-act;
-  const us=_empresas.reduce((a,t)=>a+(t.users||0),0), pr=_empresas.reduce((a,t)=>a+(t.products||0),0);
+  const act=_empresas.filter(t=>t.status==='activo').length;
+  const ven=_empresas.filter(t=>t.dias_restantes!=null&&t.dias_restantes<0).length;
   vp().innerHTML='<div class="view">'
-    +'<div class="view-head"><div><h1>Empresas</h1><p>Clientes de la plataforma</p></div>'
+    +'<div class="view-head"><div><h1>Empresas</h1><p>Panel de clientes · toca una tarjeta para administrarla</p></div>'
     +'<div class="h-actions"><button class="btn dark" onclick="openTenantForm()">'+icon('plus')+' Nueva empresa</button></div></div>'
     +'<div class="kpis" style="margin-bottom:16px">'
-    +kpi('Empresas','box',String(_empresas.length),act+' activas · '+ina+' inactivas','up',0)
-    +kpi('Usuarios','users',String(us),'en total','up',.06)
-    +kpi('Productos','tag',String(pr),'en total','up',.12)+'</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +['todas','activo','inactivo'].map(e=>'<button class="btn '+(empEstado===e?'dark':'ghost')+'" style="padding:6px 14px" onclick="setEmpEstado(\''+e+'\')">'+(e==='todas'?'Todas':(e==='activo'?'Activas':'Inactivas'))+'</button>').join('')+'</div>'
-    +'<div class="card"><div class="tbl-wrap"><table>'
-    +'<thead><tr><th>Logo</th><th>Empresa</th><th>NIT</th><th>Contacto</th><th>Correo</th><th># Contacto</th><th>Usuarios</th><th>Plan</th><th>Días rest.</th><th>Estado</th><th>Acciones</th></tr></thead>'
-    +'<tbody id="empBody"></tbody></table></div></div></div>';
+    +kpi('Empresas','box',String(_empresas.length),act+' activas','up',0)
+    +kpi('Activas','users',String(act),'al día','up',.06)
+    +kpi('Vencidas','tag',String(ven),ven?'requieren atención':'ninguna',ven?'down':'up',.12)+'</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    +['todas','activo','inactivo'].map(e=>'<button class="btn '+(empEstado===e?'dark':'ghost')+'" style="padding:6px 14px" onclick="setEmpEstado(\''+e+'\')">'+(e==='todas'?'Todas':(e==='activo'?'Activas':'Suspendidas / Vencidas'))+'</button>').join('')+'</div>'
+    +'<div id="empGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px"></div></div>';
   renderEmpresas();
 };
 function renderEmpresas(){
-  const body=document.getElementById('empBody'); if(!body) return;
+  const grid=document.getElementById('empGrid'); if(!grid) return;
   const list=_empresas.filter(t=>(empEstado==='todas'||t.status===empEstado) && (!topFilter || (t.name||'').toLowerCase().includes(topFilter)));
-  body.innerHTML=list.map(t=>'<tr>'
-    +'<td>'+(t.logo?'<img src="'+t.logo+'" style="width:32px;height:32px;border-radius:7px;object-fit:cover;border:1px solid var(--line)">':'<div style="width:32px;height:32px;border-radius:7px;background:var(--soft);display:grid;place-items:center;color:var(--faint);font-size:13px;font-weight:700">'+(t.name||'?')[0].toUpperCase()+'</div>')+'</td>'
-    +'<td><b>'+t.name+'</b>'+(t.vence?'<div style="font-size:11px;color:var(--faint)">vence '+fmtDate(t.vence)+'</div>':'')+'</td>'
-    +'<td class="mono" style="color:var(--muted)">'+(t.nit||'—')+'</td>'
-    +'<td>'+(t.contacto||'—')+'</td>'
-    +'<td style="color:var(--muted)">'+(t.email||'—')+'</td>'
-    +'<td class="mono">'+(t.telefono||'—')+'</td>'
-    +'<td class="mono">'+t.users+'</td>'
-    +'<td>'+(t.plan?'<span class="pill ok">'+t.plan+'</span>'+(Number(t.plan_cost)>0?'<div style="font-size:11px;color:var(--faint)">'+fmt(t.plan_cost)+'</div>':''):'<span style="color:var(--faint)">—</span>')+'</td>'
-    +'<td>'+(t.dias_restantes==null?'<span style="color:var(--faint)">—</span>':'<b style="color:'+(t.dias_restantes<0?'var(--danger)':(t.dias_restantes<=7?'var(--amber)':'var(--emerald)'))+'">'+(t.dias_restantes<0?'vencido':t.dias_restantes+' días')+'</b>')+'</td>'
-    +'<td><span class="pill '+(t.status==='activo'?'ok':'out')+'">'+t.status+'</span></td>'
-    +'<td style="white-space:nowrap">'
-    +'<button title="'+(t.status==='activo'?'Desactivar':'Activar')+'" onclick="toggleTenant('+t.id+',\''+t.status+'\',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">'+(t.status==='activo'?'⏸':'▶')+'</button>'
-    +'<button title="Editar" onclick="openTenantForm('+t.id+')" style="'+actBtn+'">✎</button>'
-    +'<button title="Ver usuarios" onclick="verUsuariosDe('+t.id+')" style="'+actBtn+'">👥</button>'
-    +'<button title="Facturas de servicio" onclick="openFacturas('+t.id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">📄</button>'
-    +'<button title="Entrar como (soporte)" onclick="impersonar('+t.id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">👁️</button>'
-    +'<button title="Eliminar" onclick="delEmpresa('+t.id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+';color:var(--danger)">🗑</button>'
-    +'</td></tr>').join('')||'<tr><td colspan="11" style="text-align:center;color:var(--faint);padding:40px">'+(topFilter?'Sin coincidencias':'Aún no hay empresas')+'</td></tr>';
+  grid.innerHTML=list.map(function(t){ const e=tenantEstado(t); const ini=(t.name||'?')[0].toUpperCase();
+    return '<div onclick="verEmpresa('+t.id+')" style="cursor:pointer;border:1px solid var(--line);border-top:3px solid '+e.color+';border-radius:16px;padding:18px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:14px" onmouseover="this.style.boxShadow=\'0 6px 20px rgba(0,0,0,.10)\'" onmouseout="this.style.boxShadow=\'0 1px 3px rgba(0,0,0,.05)\'">'
+      +'<div style="display:flex;align-items:center;gap:12px">'
+      +(t.logo?'<img src="'+t.logo+'" style="width:46px;height:46px;border-radius:11px;object-fit:cover;border:1px solid var(--line)">':'<div style="width:46px;height:46px;border-radius:11px;background:var(--soft);display:grid;place-items:center;color:var(--faint);font-weight:800;font-size:18px">'+ini+'</div>')
+      +'<div style="min-width:0;flex:1"><b style="font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+t.name+'</b><span class="pill '+e.cls+'" style="margin-top:4px;display:inline-block">'+e.label+'</span></div></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid var(--soft);padding-top:12px">'
+      +'<div><div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;font-weight:700">Días de servicio</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+e.color+'">'+(t.dias_restantes==null?'∞':(t.dias_restantes<0?'Vencido':t.dias_restantes))+'</div></div>'
+      +'<div style="text-align:right"><div style="font-size:11px;color:var(--faint)">'+(t.plan||'Sin plan')+'</div><div style="font-size:12px;color:var(--muted);font-weight:600">'+(t.users||0)+' usuarios</div></div>'
+      +'</div></div>';
+  }).join('')||'<div style="grid-column:1/-1;text-align:center;color:var(--faint);padding:40px">'+(topFilter?'Sin coincidencias':'Aún no hay empresas')+'</div>';
 }
+function afterUserChange(){ if(_empresaSel!=null) verEmpresa(_empresaSel); else if(typeof views.usuarios==='function') views.usuarios(); }
+async function verEmpresa(id){
+  _empresaSel=id;
+  vp().innerHTML='<div class="view"><p style="color:var(--muted)">Cargando…</p></div>';
+  let t, users=[], invoices=[]; _detBranches=[];
+  try{ const all=await API.get('/tenants'); _empresas=all; window._tenants=all; t=all.find(x=>x.id===id); }catch(e){}
+  if(!t){ toast('Empresa no encontrada'); go('empresas'); return; }
+  try{ _detBranches=await API.get('/tenants/'+id+'/branches'); }catch(e){}
+  try{ users=(await API.get('/users')).filter(u=>u.tenant_id===id); }catch(e){}
+  try{ invoices=await API.get('/tenants/'+id+'/invoices'); }catch(e){}
+  const e=tenantEstado(t);
+  const sec=function(title,body,extra){ return '<div class="card" style="margin-bottom:16px"><div class="card-head"><h3>'+title+'</h3>'+(extra||'')+'</div><div class="card-body" style="padding-top:10px">'+body+'</div></div>'; };
+  const row=function(l,v){ return '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--soft)"><span style="color:var(--muted)">'+l+'</span><b style="text-align:right">'+(v||'—')+'</b></div>'; };
+  vp().innerHTML='<div class="view">'
+    +'<div style="margin-bottom:12px"><button class="btn ghost" style="padding:5px 12px" onclick="go(\'empresas\')">← Volver a empresas</button></div>'
+    +'<div class="view-head"><div style="display:flex;align-items:center;gap:14px">'
+    +(t.logo?'<img src="'+t.logo+'" style="width:54px;height:54px;border-radius:13px;object-fit:cover;border:1px solid var(--line)">':'<div style="width:54px;height:54px;border-radius:13px;background:var(--soft);display:grid;place-items:center;color:var(--faint);font-weight:800;font-size:22px">'+(t.name||'?')[0].toUpperCase()+'</div>')
+    +'<div><h1>'+t.name+'</h1><p>'+(t.nit||'sin NIT')+' · <span class="pill '+e.cls+'">'+e.label+'</span></p></div></div>'
+    +'<div class="h-actions" style="flex-wrap:wrap">'
+    +'<button class="btn ghost" onclick="openTenantForm('+id+')">'+icon('gear')+' Editar</button>'
+    +'<button class="btn ghost" onclick="toggleTenant('+id+',\''+t.status+'\',\''+(t.name||'').replace(/'/g,"\\'")+'\')">'+(t.status==='activo'?'⏸ Suspender':'▶ Activar')+'</button>'
+    +'<button class="btn ghost" onclick="impersonar('+id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')">👁️ Entrar</button>'
+    +'<button class="btn ghost" style="color:var(--danger)" onclick="delEmpresa('+id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')">🗑 Eliminar</button>'
+    +'</div></div>'
+    +'<div class="kpis" style="margin-bottom:16px">'
+    +kpi('Días de servicio','cash',(t.dias_restantes==null?'∞':(t.dias_restantes<0?'Vencido':String(t.dias_restantes))),(t.vence?'vence '+fmtDate(t.vence):'sin corte'),(t.dias_restantes!=null&&t.dias_restantes<0?'down':'up'),0)
+    +kpi('Plan','tag',t.plan||'—',fmt(t.plan_cost||0),'up',.06)
+    +kpi('Sedes','box',String(_detBranches.length),'registradas','up',.12)
+    +kpi('Usuarios','users',String(users.length),'asociados','up',.18)+'</div>'
+    +'<div class="grid-2">'
+    +sec('Información general', row('Nombre',_esc(t.name))+row('NIT',_esc(t.nit))+row('Contacto',_esc(t.contacto))+row('Correo',_esc(t.email))+row('Teléfono',_esc(t.telefono))+row('Creada',t.created_at?fmtDate(t.created_at):''))
+    +sec('Plan y vigencia', row('Plan contratado',_esc(t.plan))+row('Costo',fmt(t.plan_cost||0))+row('Fecha de corte',t.vence?fmtDate(t.vence):'—')+row('Días restantes',t.dias_restantes==null?'—':(t.dias_restantes<0?'Vencido':t.dias_restantes+' días'))+row('Estado',e.label), '<button class="btn dark" style="padding:6px 12px" onclick="openTenantForm('+id+')">Editar</button>')
+    +'</div>'
+    +sec('Sedes', '<div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>Dirección</th><th>Teléfono</th><th>Estado</th><th></th></tr></thead><tbody>'
+       +(_detBranches.map(function(b){ return '<tr><td><b>'+_esc(b.name)+'</b></td><td>'+(_esc(b.address)||'—')+'</td><td>'+(_esc(b.phone)||'—')+'</td><td><span class="pill '+(b.status==='activo'?'ok':'out')+'">'+b.status+'</span></td><td style="white-space:nowrap"><button onclick="openSedeForm('+id+','+b.id+')" style="'+actBtn+'">✎</button><button onclick="delSede('+id+','+b.id+')" style="'+actBtn+';color:var(--danger)">🗑</button></td></tr>'; }).join('')||'<tr><td colspan="5" style="color:var(--faint);padding:14px">Sin sedes</td></tr>')
+       +'</tbody></table></div>', '<button class="btn dark" style="padding:6px 12px" onclick="openSedeForm('+id+')">'+icon('plus')+' Sede</button>')
+    +sec('Usuarios asociados', '<div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>Usuario</th><th>Sede</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>'
+       +(users.map(function(u){ return '<tr><td><b>'+_esc(u.name)+'</b></td><td class="mono" style="color:var(--muted)">@'+(_esc(u.username)||'—')+'</td><td>'+(u.branch_name?_esc(u.branch_name):'<span style="color:var(--faint)">toda</span>')+'</td><td><span class="pill ok">'+roleLabel(u.role)+'</span></td><td><span class="pill '+(u.status==='activo'?'ok':'out')+'">'+u.status+'</span></td><td style="white-space:nowrap"><button onclick="resetUserPw('+u.id+',\''+(u.username||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">🔑</button><button onclick="openUserForm('+u.id+')" style="'+actBtn+'">✎</button><button onclick="toggleUser('+u.id+',\''+u.status+'\')" style="'+actBtn+'">'+(u.status==='activo'?'⏸':'▶')+'</button></td></tr>'; }).join('')||'<tr><td colspan="6" style="color:var(--faint);padding:14px">Sin usuarios</td></tr>')
+       +'</tbody></table></div>', '<button class="btn dark" style="padding:6px 12px" onclick="openUserForm(null,'+id+')">'+icon('plus')+' Usuario</button>')
+    +sec('Facturas e historial de pagos', '<div class="tbl-wrap"><table><thead><tr><th>Factura</th><th>Plan</th><th>Valor</th><th>Pago</th><th>Vence</th><th>Estado</th><th>Correo</th></tr></thead><tbody>'
+       +(invoices.map(function(f){ return '<tr><td class="mono"><b>'+f.numero+'</b></td><td>'+(f.plan||'—')+'</td><td>'+fmt(f.amount)+'</td><td>'+fmtDate(f.issued_at)+'</td><td>'+(f.due_date?fmtDate(f.due_date):'—')+'</td><td><span class="pill '+(f.status==='activo'?'ok':'out')+'">'+f.status+'</span></td><td style="font-size:12px;color:var(--muted)">'+(f.sent?'✓ enviado':(f.email_to?'pendiente':'sin correo'))+'</td></tr>'; }).join('')||'<tr><td colspan="7" style="color:var(--faint);padding:14px">Sin facturas</td></tr>')
+       +'</tbody></table></div>', '<button class="btn dark" style="padding:6px 12px" onclick="generarFacturaDetalle('+id+')">'+icon('plus')+' Generar y enviar</button>')
+    +'</div>';
+}
+async function generarFacturaDetalle(id){ try{ const f=await API.post('/tenants/'+id+'/invoice',{}); toast('✓ Factura '+f.numero+(f.sent?' enviada al correo':' generada (configura SMTP para enviar)')); verEmpresa(id); }catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo')); } }
+function openSedeForm(tid,bid){
+  const b=bid?((_detBranches||[]).find(x=>x.id===bid)||{}):{};
+  const m=document.getElementById('modal');
+  m.innerHTML='<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">'
+    +'<div style="padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center"><b style="font-family:var(--font-display);font-size:17px">'+(bid?'Editar sede':'Nueva sede')+'</b><button onclick="closeModal()" style="font-size:24px;color:var(--faint);line-height:1">×</button></div>'
+    +'<div style="padding:20px 22px;display:grid;gap:14px">'
+    +'<div><label style="'+flbl+'">Nombre *</label><input id="sd_name" value="'+_esc(b.name)+'" style="'+finp+'"></div>'
+    +'<div><label style="'+flbl+'">Dirección</label><input id="sd_addr" value="'+_esc(b.address)+'" style="'+finp+'"></div>'
+    +'<div><label style="'+flbl+'">Teléfono</label><input id="sd_tel" value="'+_esc(b.phone)+'" style="'+finp+'"></div>'
+    +(bid?'<div><label style="'+flbl+'">Estado</label><select id="sd_est" style="'+finp+';background:#fff"><option value="activo" '+(b.status==='activo'?'selected':'')+'>Activo</option><option value="inactivo" '+(b.status==='inactivo'?'selected':'')+'>Inactivo</option></select></div>':'')
+    +'</div>'
+    +'<div style="padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn dark" onclick="saveSede('+tid+','+(bid||'null')+')">Guardar</button></div></div>';
+  m.style.display='flex';
+}
+async function saveSede(tid,bid){
+  const name=document.getElementById('sd_name').value.trim();
+  if(!name){ toast('El nombre es obligatorio'); return; }
+  const body={ name, address:document.getElementById('sd_addr').value.trim(), phone:document.getElementById('sd_tel').value.trim() };
+  const est=document.getElementById('sd_est'); if(est) body.status=est.value;
+  try{ if(bid) await API.put('/tenants/'+tid+'/branches/'+bid,body); else await API.post('/tenants/'+tid+'/branches',body); closeModal(); verEmpresa(tid); toast('✓ Sede guardada'); }
+  catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo guardar')); }
+}
+async function delSede(tid,bid){ if(!confirm('¿Eliminar esta sede?')) return; try{ await API.del('/tenants/'+tid+'/branches/'+bid); verEmpresa(tid); toast('✓ Sede eliminada'); }catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo eliminar')); } }
 function openTenantForm(id){
   _logoData=null;
   const edit=id!=null, t=edit?(_empresas.find(x=>x.id===id)||{}):{};
@@ -1659,12 +1725,12 @@ async function saveTenant(id){
   try{
     if(edit){ const pw=document.getElementById('f_t_pw').value; if(!pw){ err.textContent='Escribe tu contraseña para guardar'; return; } payload.confirm_password=pw; await API.patch('/tenants/'+id,payload); toast('✓ Empresa actualizada'); }
     else { const created=await API.post('/tenants',payload); toast('✓ Empresa creada'+(created.factura?(' · factura '+created.factura.numero+(created.factura.sent?' enviada al correo':'')):'')); }
-    _logoData=null; closeModal(); views.empresas();
+    _logoData=null; closeModal(); if(_empresaSel!=null) verEmpresa(_empresaSel); else views.empresas();
   }catch(e){ err.textContent=(e.error&&e.error.message)||'No se pudo guardar'; }
 }
 function toggleTenant(id,status,name){
   const to=status==='activo'?'inactivo':'activo';
-  askPassword({ title:(to==='inactivo'?'Desactivar':'Activar')+' empresa', cta:(to==='inactivo'?'Desactivar':'Activar'), message:'Vas a '+(to==='inactivo'?'desactivar':'activar')+' <b>'+name+'</b>. Confirma tu contraseña.', onConfirm:async function(pw){ await API.patch('/tenants/'+id,{status:to,confirm_password:pw}); closeModal(); views.empresas(); toast('✓ Empresa '+(to==='inactivo'?'desactivada':'activada')); } });
+  askPassword({ title:(to==='inactivo'?'Desactivar':'Activar')+' empresa', cta:(to==='inactivo'?'Desactivar':'Activar'), message:'Vas a '+(to==='inactivo'?'desactivar':'activar')+' <b>'+name+'</b>. Confirma tu contraseña.', onConfirm:async function(pw){ await API.patch('/tenants/'+id,{status:to,confirm_password:pw}); closeModal(); if(_empresaSel!=null) verEmpresa(_empresaSel); else views.empresas(); toast('✓ Empresa '+(to==='inactivo'?'desactivada':'activada')); } });
 }
 function delEmpresa(id,name){
   askPassword({ title:'Eliminar empresa', danger:true, cta:'Eliminar definitivamente', message:'⚠️ Vas a eliminar <b>'+name+'</b> y <b>TODO</b> lo suyo: productos, ventas, movimientos y usuarios. No se puede deshacer. Confirma tu contraseña.', onConfirm:async function(pw){ await API.del('/tenants/'+id,{confirm_password:pw}); closeModal(); views.empresas(); toast('✓ Empresa eliminada'); } });
@@ -1700,6 +1766,7 @@ async function generarFactura(id,name){
 /* ---------- USUARIOS ---------- */
 let _usuarios=[]; let userTenantFilter=null;
 views.usuarios=async function(){
+  _empresaSel=null;
   vp().innerHTML='<div class="view"><p style="color:var(--muted)">Cargando…</p></div>';
   try{ const r=await Promise.all([API.get('/users'),API.get('/tenants')]); _usuarios=r[0]; window._tenants=r[1]; }catch(e){ _usuarios=[]; }
   const fEmp=userTenantFilter!=null?((window._tenants||[]).find(t=>t.id===userTenantFilter)||{}).name:null;
@@ -1728,7 +1795,7 @@ function renderUsuarios(){
        +'<button title="Editar" onclick="openUserForm('+u.id+')" style="'+actBtn+'">✎</button>'
        +'<button title="Eliminar" onclick="delUser('+u.id+',\''+(u.username||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+';color:var(--danger)">🗑</button>'))+'</td></tr>').join('')||'<tr><td colspan="8" style="text-align:center;color:var(--faint);padding:40px">'+(topFilter?'Sin coincidencias':'Sin usuarios')+'</td></tr>';
 }
-function openUserForm(id){
+function openUserForm(id, presetTenant){
   const edit=id!=null, u=edit?(_usuarios.find(x=>x.id===id)||{}):{};
   const tenants=window._tenants||[];
   const m=document.getElementById('modal');
@@ -1746,7 +1813,7 @@ function openUserForm(id){
     +'<div id="u_err" style="color:var(--danger);font-size:13px;min-height:16px"></div></div>'
     +'<div style="padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn dark" onclick="saveUser('+(edit?id:'null')+')">'+(edit?'Guardar cambios':'Crear usuario')+'</button></div></div>';
   m.style.display='flex';
-  if(!edit) setTimeout(loadUserBranches,30);
+  if(!edit) setTimeout(function(){ if(presetTenant){ var s=document.getElementById('f_u_tenant'); if(s){ s.value=String(presetTenant); s.disabled=true; } } loadUserBranches(); },30);
 }
 async function loadUserBranches(){
   const sel=document.getElementById('f_u_tenant'), bsel=document.getElementById('f_u_branch');
@@ -1777,16 +1844,16 @@ async function saveUser(id){
       const emp=((window._tenants||[]).find(t=>t.id===Number(tenant_id))||{}).name||'';
       const branch_id=(document.getElementById('f_u_branch')||{}).value||null;
       await API.post('/users',{name,username,password,email,tenant_id:Number(tenant_id),role,branch_id});
-      showCredentials(emp,username,password); views.usuarios();
+      showCredentials(emp,username,password); afterUserChange();
     }
   }catch(e){ err.textContent=(e.error&&e.error.message)||'No se pudo guardar'; }
 }
 function toggleUser(id,status){
   const to=status==='activo'?'inactivo':'activo';
-  askPassword({ title:(to==='inactivo'?'Desactivar':'Activar')+' usuario', cta:(to==='inactivo'?'Desactivar':'Activar'), message:'Confirma tu contraseña para '+(to==='inactivo'?'desactivar':'activar')+' este usuario.', onConfirm:async function(pw){ await API.patch('/users/'+id,{status:to,confirm_password:pw}); closeModal(); views.usuarios(); toast('✓ Usuario actualizado'); } });
+  askPassword({ title:(to==='inactivo'?'Desactivar':'Activar')+' usuario', cta:(to==='inactivo'?'Desactivar':'Activar'), message:'Confirma tu contraseña para '+(to==='inactivo'?'desactivar':'activar')+' este usuario.', onConfirm:async function(pw){ await API.patch('/users/'+id,{status:to,confirm_password:pw}); closeModal(); afterUserChange(); toast('✓ Usuario actualizado'); } });
 }
 function delUser(id,username){
-  askPassword({ title:'Eliminar usuario', danger:true, cta:'Eliminar', message:'Vas a eliminar al usuario <b>@'+username+'</b>. Confirma tu contraseña.', onConfirm:async function(pw){ await API.del('/users/'+id,{confirm_password:pw}); closeModal(); views.usuarios(); toast('✓ Usuario eliminado'); } });
+  askPassword({ title:'Eliminar usuario', danger:true, cta:'Eliminar', message:'Vas a eliminar al usuario <b>@'+username+'</b>. Confirma tu contraseña.', onConfirm:async function(pw){ await API.del('/users/'+id,{confirm_password:pw}); closeModal(); afterUserChange(); toast('✓ Usuario eliminado'); } });
 }
 function resetUserPw(id,username){
   const m=document.getElementById('modal');
