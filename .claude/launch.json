@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nexo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 3070,
+      "env": {
+        "PORT": "3070",
+        "DB_PATH": "data/preview.json",
+        "SEED_SUPER_PASS": "SuperClave123",
+        "SEED_DEMO_PASS": "DemoClave123"
+      }
+    }
+  ]
+}
