@@ -35,7 +35,7 @@ before(async () => {
   const port = server.address().port;
   base = `http://127.0.0.1:${port}/api`;
   root = `http://127.0.0.1:${port}`;
-  superToken = (await login('Nexo', 'Súper Admin', 'SuperClave123')).json.token;
+  superToken = (await login('Nexo', 'Soporte', 'SuperClave123')).json.token;
   demoToken  = (await login('JEROTECH', 'DEMO', 'DemoClave123')).json.token;
 });
 
@@ -406,4 +406,39 @@ test('reset con token inválido -> 400', async () => {
   const r = await api('POST', '/auth/reset', { body:{ token:'noexiste', password:'OtraClave1' } });
   assert.strictEqual(r.status, 400);
   assert.strictEqual(r.json.error.code, 'TOKEN_INVALIDO');
+});
+
+// ---- Fase L: planes, vigencia y facturación ----
+test('crear empresa con plan y costo genera factura de servicio', async () => {
+  const r = await api('POST', '/tenants', { token:superToken, body:{ name:'PLAN_CO', email:'plan@co.test', plan:'Premium', plan_cost:120000, vence:'2030-12-31' } });
+  assert.strictEqual(r.status, 201);
+  assert.strictEqual(r.json.plan, 'Premium');
+  assert.strictEqual(r.json.plan_cost, 120000);
+  assert.ok(r.json.factura && /^SVC-\d{5}$/.test(r.json.factura.numero), 'factura emitida');
+  assert.strictEqual(r.json.factura.amount, 120000);
+  const invs = await api('GET', `/tenants/${r.json.id}/invoices`, { token:superToken });
+  assert.strictEqual(invs.status, 200);
+  assert.ok(invs.json.length >= 1);
+});
+
+test('días restantes y auto-desactivación por vencimiento', async () => {
+  const exp = await api('POST', '/tenants', { token:superToken, body:{ name:'VENCIDA_CO', vence:'2020-01-01', plan:'Básico', plan_cost:1000 } });
+  await api('POST', '/users', { token:superToken, body:{ username:'vadmin', password:'ClaveVenc1', role:'admin', tenant_id:exp.json.id } });
+  const list = (await api('GET', '/tenants', { token:superToken })).json;
+  const t = list.find(x=>x.id===exp.json.id);
+  assert.ok(t.dias_restantes < 0, 'días restantes negativos');
+  assert.strictEqual(t.status, 'inactivo', 'auto-desactivada al vencer');
+  const lg = await api('POST', '/auth/login', { body:{ empresa:'VENCIDA_CO', username:'vadmin', password:'ClaveVenc1' } });
+  assert.strictEqual(lg.status, 403, 'login bloqueado por vencimiento');
+});
+
+test('usuario asignado a una sede (branch_id)', async () => {
+  const t = await api('POST', '/tenants', { token:superToken, body:{ name:'SEDE_CO' } });
+  const brs = await api('GET', `/tenants/${t.json.id}/branches`, { token:superToken });
+  assert.strictEqual(brs.status, 200);
+  assert.ok(brs.json.length >= 1, 'tiene sucursal Principal');
+  const bid = brs.json[0].id;
+  await api('POST', '/users', { token:superToken, body:{ username:'sedeuser', password:'ClaveSede1', role:'tienda', tenant_id:t.json.id, branch_id:bid } });
+  const u = (await api('GET', '/users', { token:superToken })).json.find(x=>x.username==='sedeuser');
+  assert.strictEqual(u.branch_id, bid, 'usuario ligado a la sede');
 });

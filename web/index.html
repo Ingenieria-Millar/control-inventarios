@@ -497,7 +497,7 @@ function onTopSearch(v){
 }
 function renderUserChip(){
   const ini=(currentUser.name||'U').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
-  const sub=currentUser.role==='superadmin'?'Súper administrador':((currentUser.tenant_name||'')+' · @'+(currentUser.username||''));
+  const sub=currentUser.role==='superadmin'?'Soporte':((currentUser.tenant_name||'')+' · @'+(currentUser.username||''));
   document.getElementById('sbUser').innerHTML=`<div class="avatar">${ini}</div><div class="meta" style="flex:1;min-width:0"><b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${currentUser.name}</b><span>${sub}</span></div><button onclick="openPasswordForm()" title="Cambiar contraseña" style="background:none;color:#7f8696;font-size:15px;cursor:pointer;padding:4px">🔑</button><button onclick="logout()" title="Cerrar sesión" style="background:none;color:#7f8696;font-size:17px;cursor:pointer;padding:4px">⎋</button>`;
 }
 function openPasswordForm(){
@@ -1551,7 +1551,7 @@ async function saveCompanyUserPw(id){
 /* ---------- TOAST ---------- */
 let toastT;
 function toast(msg){const t=document.getElementById('toast');t.innerHTML=`<span class="ic">●</span> ${msg}`;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);}
-function roleLabel(r){ return r==='superadmin'?'Súper administrador':(r==='admin'?'Administrador':'Tienda'); }
+function roleLabel(r){ return r==='superadmin'?'Soporte':(r==='admin'?'Administrador':'Tienda'); }
 let _logoData=null;
 function onLogoPick(input){ const f=input.files&&input.files[0]; if(!f){ return; } if(f.size>650000){ toast('El logo es muy pesado (máx ~600 KB)'); input.value=''; return; } const fr=new FileReader(); fr.onload=()=>{ _logoData=fr.result; const pv=document.getElementById('t_logo_pv'); if(pv){ pv.src=fr.result; pv.style.display='block'; } }; fr.onerror=()=>toast('No se pudo leer la imagen'); fr.readAsDataURL(f); }
 /* ---------- HELPERS SÚPER-ADMIN ---------- */
@@ -1599,7 +1599,7 @@ views.empresas=async function(){
     +'<div style="display:flex;gap:8px;margin-bottom:12px">'
     +['todas','activo','inactivo'].map(e=>'<button class="btn '+(empEstado===e?'dark':'ghost')+'" style="padding:6px 14px" onclick="setEmpEstado(\''+e+'\')">'+(e==='todas'?'Todas':(e==='activo'?'Activas':'Inactivas'))+'</button>').join('')+'</div>'
     +'<div class="card"><div class="tbl-wrap"><table>'
-    +'<thead><tr><th>Logo</th><th>Empresa</th><th>NIT</th><th>Contacto</th><th>Correo</th><th># Contacto</th><th>Usuarios</th><th>Estado</th><th>Acciones</th></tr></thead>'
+    +'<thead><tr><th>Logo</th><th>Empresa</th><th>NIT</th><th>Contacto</th><th>Correo</th><th># Contacto</th><th>Usuarios</th><th>Plan</th><th>Días rest.</th><th>Estado</th><th>Acciones</th></tr></thead>'
     +'<tbody id="empBody"></tbody></table></div></div></div>';
   renderEmpresas();
 };
@@ -1614,14 +1614,17 @@ function renderEmpresas(){
     +'<td style="color:var(--muted)">'+(t.email||'—')+'</td>'
     +'<td class="mono">'+(t.telefono||'—')+'</td>'
     +'<td class="mono">'+t.users+'</td>'
+    +'<td>'+(t.plan?'<span class="pill ok">'+t.plan+'</span>'+(Number(t.plan_cost)>0?'<div style="font-size:11px;color:var(--faint)">'+fmt(t.plan_cost)+'</div>':''):'<span style="color:var(--faint)">—</span>')+'</td>'
+    +'<td>'+(t.dias_restantes==null?'<span style="color:var(--faint)">—</span>':'<b style="color:'+(t.dias_restantes<0?'var(--danger)':(t.dias_restantes<=7?'var(--amber)':'var(--emerald)'))+'">'+(t.dias_restantes<0?'vencido':t.dias_restantes+' días')+'</b>')+'</td>'
     +'<td><span class="pill '+(t.status==='activo'?'ok':'out')+'">'+t.status+'</span></td>'
     +'<td style="white-space:nowrap">'
     +'<button title="'+(t.status==='activo'?'Desactivar':'Activar')+'" onclick="toggleTenant('+t.id+',\''+t.status+'\',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">'+(t.status==='activo'?'⏸':'▶')+'</button>'
     +'<button title="Editar" onclick="openTenantForm('+t.id+')" style="'+actBtn+'">✎</button>'
     +'<button title="Ver usuarios" onclick="verUsuariosDe('+t.id+')" style="'+actBtn+'">👥</button>'
+    +'<button title="Facturas de servicio" onclick="openFacturas('+t.id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">📄</button>'
     +'<button title="Entrar como (soporte)" onclick="impersonar('+t.id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">👁️</button>'
     +'<button title="Eliminar" onclick="delEmpresa('+t.id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+';color:var(--danger)">🗑</button>'
-    +'</td></tr>').join('')||'<tr><td colspan="9" style="text-align:center;color:var(--faint);padding:40px">'+(topFilter?'Sin coincidencias':'Aún no hay empresas')+'</td></tr>';
+    +'</td></tr>').join('')||'<tr><td colspan="11" style="text-align:center;color:var(--faint);padding:40px">'+(topFilter?'Sin coincidencias':'Aún no hay empresas')+'</td></tr>';
 }
 function openTenantForm(id){
   _logoData=null;
@@ -1636,7 +1639,10 @@ function openTenantForm(id){
     +ffield('t_contacto','Contacto (nombre)',t.contacto||'')
     +ffield('t_email','Correo',t.email||'','email')
     +ffield('t_tel','# Contacto (teléfono)',t.telefono||'')
-    +'<div><label style="'+flbl+'">Vencimiento del plan</label><input id="f_t_vence" type="date" value="'+(t.vence||'')+'" style="'+finp+'"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div><label style="'+flbl+'">Plan contratado</label><select id="f_t_plan" style="'+finp+';background:#fff">'+['','Básico','Estándar','Premium','Personalizado'].map(p=>'<option value="'+p+'" '+((t.plan||'')===p?'selected':'')+'>'+(p||'— Selecciona —')+'</option>').join('')+'</select></div>'
+    +'<div><label style="'+flbl+'">Costo del plan (COP)</label><input id="f_t_cost" type="number" min="0" value="'+(t.plan_cost||0)+'" style="'+finp+'"></div></div>'
+    +'<div><label style="'+flbl+'">Fecha de corte / vencimiento</label><input id="f_t_vence" type="date" value="'+(t.vence||'')+'" style="'+finp+'"></div>'
     +'<div><label style="'+flbl+'">Logo</label><input type="file" accept="image/*" onchange="onLogoPick(this)" style="font-size:13px"><img id="t_logo_pv" src="'+(t.logo||'')+'" style="'+(t.logo?'':'display:none;')+'width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--line);margin-top:10px"></div>'
     +(edit?'<div style="border-top:1px solid var(--line);padding-top:14px"><label style="'+flbl+'">Tu contraseña (para guardar) *</label><input id="f_t_pw" type="password" style="'+finp+'"></div>':'')
     +'<div id="t_err" style="color:var(--danger);font-size:13px;min-height:16px"></div></div>'
@@ -1646,13 +1652,13 @@ function openTenantForm(id){
 async function saveTenant(id){
   const edit=id!=null, err=document.getElementById('t_err');
   const name=document.getElementById('f_t_name').value.trim();
-  const payload={ name, nit:document.getElementById('f_t_nit').value.trim(), contacto:document.getElementById('f_t_contacto').value.trim(), email:document.getElementById('f_t_email').value.trim(), telefono:document.getElementById('f_t_tel').value.trim(), vence:document.getElementById('f_t_vence').value||null };
+  const payload={ name, nit:document.getElementById('f_t_nit').value.trim(), contacto:document.getElementById('f_t_contacto').value.trim(), email:document.getElementById('f_t_email').value.trim(), telefono:document.getElementById('f_t_tel').value.trim(), vence:document.getElementById('f_t_vence').value||null, plan:document.getElementById('f_t_plan').value||null, plan_cost:Number(document.getElementById('f_t_cost').value)||0 };
   if(!name){ err.textContent='El nombre es obligatorio'; return; }
   if(name.toLowerCase()==='nexo'){ err.textContent='El nombre "Nexo" está reservado'; return; }
   if(_logoData) payload.logo=_logoData;
   try{
     if(edit){ const pw=document.getElementById('f_t_pw').value; if(!pw){ err.textContent='Escribe tu contraseña para guardar'; return; } payload.confirm_password=pw; await API.patch('/tenants/'+id,payload); toast('✓ Empresa actualizada'); }
-    else { await API.post('/tenants',payload); toast('✓ Empresa creada'); }
+    else { const created=await API.post('/tenants',payload); toast('✓ Empresa creada'+(created.factura?(' · factura '+created.factura.numero+(created.factura.sent?' enviada al correo':'')):'')); }
     _logoData=null; closeModal(); views.empresas();
   }catch(e){ err.textContent=(e.error&&e.error.message)||'No se pudo guardar'; }
 }
@@ -1673,6 +1679,23 @@ async function stopImpersonate(){
   try{ currentUser=await API.get('/auth/me'); await showApp(); }catch(e){ doLogout(); }
 }
 function verUsuariosDe(id){ userTenantFilter=id; go('usuarios'); }
+async function openFacturas(id,name){
+  let list=[]; try{ list=await API.get('/tenants/'+id+'/invoices'); }catch(e){}
+  const m=document.getElementById('modal');
+  m.innerHTML='<div style="background:#fff;border-radius:16px;max-width:580px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">'
+    +'<div style="padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center"><b style="font-family:var(--font-display);font-size:17px">Facturas de servicio · '+name+'</b><button onclick="closeModal()" style="font-size:24px;color:var(--faint);line-height:1">×</button></div>'
+    +'<div style="padding:18px 22px">'
+    +'<div style="text-align:right;margin-bottom:12px"><button class="btn dark" onclick="generarFactura('+id+',\''+name.replace(/'/g,"\\'")+'\')">'+icon('plus')+' Generar y enviar factura</button></div>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Factura</th><th>Plan</th><th>Valor</th><th>Pago</th><th>Vence</th><th>Estado</th><th>Correo</th></tr></thead><tbody>'
+    +(list.length?list.map(f=>'<tr><td class="mono"><b>'+f.numero+'</b></td><td>'+(f.plan||'—')+'</td><td>'+fmt(f.amount)+'</td><td>'+fmtDate(f.issued_at)+'</td><td>'+(f.due_date?fmtDate(f.due_date):'—')+'</td><td><span class="pill '+(f.status==='activo'?'ok':'out')+'">'+f.status+'</span></td><td style="font-size:12px;color:var(--muted)">'+(f.sent?'✓ enviado':(f.email_to?'pendiente':'sin correo'))+'</td></tr>').join(''):'<tr><td colspan="7" style="color:var(--faint);padding:16px">Sin facturas. Genera la primera.</td></tr>')
+    +'</tbody></table></div></div>'
+    +'<div style="padding:14px 22px;border-top:1px solid var(--line);text-align:right"><button class="btn ghost" onclick="closeModal()">Cerrar</button></div></div>';
+  m.style.display='flex';
+}
+async function generarFactura(id,name){
+  try{ const f=await API.post('/tenants/'+id+'/invoice',{}); toast('✓ Factura '+f.numero+(f.sent?' enviada al correo':' generada (configura SMTP para enviar)')); openFacturas(id,name); }
+  catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo generar')); }
+}
 
 /* ---------- USUARIOS ---------- */
 let _usuarios=[]; let userTenantFilter=null;
@@ -1716,12 +1739,21 @@ function openUserForm(id){
     +ffield('u_username','Usuario *',u.username||'')
     +(edit?'<div><label style="'+flbl+'">Nueva contraseña (opcional)</label><input id="f_u_pass" type="text" placeholder="Dejar en blanco para no cambiar" style="'+finp+'"></div>':ffield('u_pass','Contraseña *','','text'))
     +ffield('u_email','Correo',u.email||'','email')
-    +(edit?'':'<div><label style="'+flbl+'">Empresa</label><select id="f_u_tenant" style="'+finp+';background:#fff">'+(tenants.map(t=>'<option value="'+t.id+'">'+t.name+'</option>').join('')||'<option value="">(crea una empresa primero)</option>')+'</select></div>')
+    +(edit?'':'<div><label style="'+flbl+'">Empresa</label><select id="f_u_tenant" onchange="loadUserBranches()" style="'+finp+';background:#fff">'+(tenants.map(t=>'<option value="'+t.id+'">'+t.name+'</option>').join('')||'<option value="">(crea una empresa primero)</option>')+'</select></div>'
+    +'<div><label style="'+flbl+'">Sede (opcional)</label><select id="f_u_branch" style="'+finp+';background:#fff"><option value="">— Toda la empresa —</option></select></div>')
     +'<label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;cursor:pointer"><input type="checkbox" id="f_u_admin" '+(u.role==='admin'?'checked':'')+'> ¿Administrador? <span style="color:var(--faint);font-weight:400">(si no, será Tienda)</span></label>'
     +(edit?'<div style="border-top:1px solid var(--line);padding-top:14px"><label style="'+flbl+'">Tu contraseña (para guardar) *</label><input id="f_u_pw" type="password" style="'+finp+'"></div>':'')
     +'<div id="u_err" style="color:var(--danger);font-size:13px;min-height:16px"></div></div>'
     +'<div style="padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn dark" onclick="saveUser('+(edit?id:'null')+')">'+(edit?'Guardar cambios':'Crear usuario')+'</button></div></div>';
   m.style.display='flex';
+  if(!edit) setTimeout(loadUserBranches,30);
+}
+async function loadUserBranches(){
+  const sel=document.getElementById('f_u_tenant'), bsel=document.getElementById('f_u_branch');
+  if(!sel||!bsel) return;
+  bsel.innerHTML='<option value="">— Toda la empresa —</option>';
+  const tid=sel.value; if(!tid) return;
+  try{ const brs=await API.get('/tenants/'+tid+'/branches'); bsel.innerHTML+=brs.map(b=>'<option value="'+b.id+'">'+b.name+'</option>').join(''); }catch(e){}
 }
 async function saveUser(id){
   const edit=id!=null, err=document.getElementById('u_err');
@@ -1743,7 +1775,8 @@ async function saveUser(id){
       const tenant_id=document.getElementById('f_u_tenant').value;
       if(!tenant_id){ err.textContent='Crea una empresa primero'; return; }
       const emp=((window._tenants||[]).find(t=>t.id===Number(tenant_id))||{}).name||'';
-      await API.post('/users',{name,username,password,email,tenant_id:Number(tenant_id),role});
+      const branch_id=(document.getElementById('f_u_branch')||{}).value||null;
+      await API.post('/users',{name,username,password,email,tenant_id:Number(tenant_id),role,branch_id});
       showCredentials(emp,username,password); views.usuarios();
     }
   }catch(e){ err.textContent=(e.error&&e.error.message)||'No se pudo guardar'; }

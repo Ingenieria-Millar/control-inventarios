@@ -97,9 +97,10 @@ function loadJson(){
   data.branchStock=data.branchStock||[];
   data.cashSessions=data.cashSessions||[];
   data.passwordResets=data.passwordResets||[];
+  data.serviceInvoices=data.serviceInvoices||[];
   data.counters=data.counters||{};
   const mx=a=>a.reduce((m,x)=>Math.max(m,x.id||0),0);
-  ['tenant','user','product','sale','movement','purchase','expense','audit','customer','return','unit','branch','cashsession'].forEach(k=>{ if(data.counters[k]==null) data.counters[k]=0; });
+  ['tenant','user','product','sale','movement','purchase','expense','audit','customer','return','unit','branch','cashsession','sinvoice'].forEach(k=>{ if(data.counters[k]==null) data.counters[k]=0; });
   data.counters.tenant=Math.max(data.counters.tenant,mx(data.tenants));
   data.counters.user=Math.max(data.counters.user,mx(data.users));
   data.counters.product=Math.max(data.counters.product,mx(data.products));
@@ -113,6 +114,7 @@ function loadJson(){
   data.counters.unit=Math.max(data.counters.unit,mx(data.units));
   data.counters.branch=Math.max(data.counters.branch,mx(data.branches));
   data.counters.cashsession=Math.max(data.counters.cashsession,mx(data.cashSessions));
+  data.counters.sinvoice=Math.max(data.counters.sinvoice,mx(data.serviceInvoices));
   reconcileBranches();
 }
 // ----- Helpers de sucursales (modo JSON) -----
@@ -129,19 +131,19 @@ const jsonRepo = {
   async logAudit(e){ const row={ id:nextId('audit'), ts:new Date().toISOString(), actor_user_id:e.actor_user_id==null?null:Number(e.actor_user_id), actor_name:e.actor_name||null, actor_role:e.actor_role||null, tenant_id:e.tenant_id==null?null:Number(e.tenant_id), action:e.action, entity:e.entity||null, entity_id:e.entity_id==null?null:Number(e.entity_id), detail:e.detail||null, ip:e.ip||null }; data.audit.push(row); saveJson(); return row; },
   async listAudit({ tenant_id=null, limit=200 }={}){ let rows=data.audit; if(tenant_id!=null) rows=rows.filter(r=>r.tenant_id===Number(tenant_id)); return rows.slice().sort((a,b)=>b.id-a.id).slice(0, Math.max(1,Number(limit)||200)); },
   // Tenants
-  async createTenant(o){ const t={ id:nextId('tenant'), name:o.name, code:(o.code||'').toUpperCase()||null, nit:o.nit||'', email:o.email||null, contacto:o.contacto||null, telefono:o.telefono||null, vence:o.vence||null, logo:o.logo||null, status:'activo', created_at:new Date().toISOString() }; data.tenants.push(t); data.branches.push({ id:nextId('branch'), tenant_id:t.id, name:'Principal', address:'', phone:'', status:'activo', created_at:new Date().toISOString() }); saveJson(); return t; },
+  async createTenant(o){ const t={ id:nextId('tenant'), name:o.name, code:(o.code||'').toUpperCase()||null, nit:o.nit||'', email:o.email||null, contacto:o.contacto||null, telefono:o.telefono||null, vence:o.vence||null, plan:o.plan||null, plan_cost:Number(o.plan_cost)||0, logo:o.logo||null, status:'activo', created_at:new Date().toISOString() }; data.tenants.push(t); data.branches.push({ id:nextId('branch'), tenant_id:t.id, name:'Principal', address:'', phone:'', status:'activo', created_at:new Date().toISOString() }); saveJson(); return t; },
   async getTenant(id){ return data.tenants.find(t=>t.id===Number(id)) || null; },
   async findTenantByCode(code){ const c=String(code||'').toUpperCase(); return data.tenants.find(t=>(t.code||'').toUpperCase()===c) || null; },
   async findTenantByName(name){ const n=String(name||'').trim().toLowerCase(); return data.tenants.find(t=>(t.name||'').trim().toLowerCase()===n) || null; },
-  async listTenants(){ return data.tenants.map(t=>({ ...t, users:data.users.filter(u=>u.tenant_id===t.id).length, products:data.products.filter(p=>p.tenant_id===t.id).length })); },
-  async updateTenant(id,f){ const t=data.tenants.find(x=>x.id===Number(id)); if(!t) return null; if(f.status) t.status=f.status; if(f.name) t.name=f.name; if(f.nit!==undefined) t.nit=f.nit; if(f.email!==undefined) t.email=f.email; if(f.contacto!==undefined) t.contacto=f.contacto; if(f.telefono!==undefined) t.telefono=f.telefono; if(f.vence!==undefined) t.vence=f.vence||null; if(f.logo!==undefined) t.logo=f.logo; if(f.code!==undefined) t.code=(f.code||'').toUpperCase()||null; saveJson(); return t; },
+  async listTenants(){ const today=new Date().toISOString().slice(0,10); let changed=false; data.tenants.forEach(t=>{ if(t.vence && today>String(t.vence).slice(0,10) && t.status==='activo'){ t.status='inactivo'; changed=true; } }); if(changed) saveJson(); return data.tenants.map(t=>({ ...t, plan_cost:Number(t.plan_cost)||0, dias_restantes:diasRestantes(t.vence), users:data.users.filter(u=>u.tenant_id===t.id).length, products:data.products.filter(p=>p.tenant_id===t.id).length })); },
+  async updateTenant(id,f){ const t=data.tenants.find(x=>x.id===Number(id)); if(!t) return null; if(f.status) t.status=f.status; if(f.name) t.name=f.name; if(f.nit!==undefined) t.nit=f.nit; if(f.email!==undefined) t.email=f.email; if(f.contacto!==undefined) t.contacto=f.contacto; if(f.telefono!==undefined) t.telefono=f.telefono; if(f.vence!==undefined) t.vence=f.vence||null; if(f.plan!==undefined) t.plan=f.plan; if(f.plan_cost!==undefined) t.plan_cost=Number(f.plan_cost)||0; if(f.logo!==undefined) t.logo=f.logo; if(f.code!==undefined) t.code=(f.code||'').toUpperCase()||null; saveJson(); return t; },
   async deleteTenant(id){ const tid=Number(id); const t=data.tenants.find(x=>x.id===tid); if(!t) return false; const uids=data.users.filter(u=>u.tenant_id===tid).map(u=>u.id); data.sessions=data.sessions.filter(s=>!uids.includes(s.user_id)); data.users=data.users.filter(u=>u.tenant_id!==tid); data.products=data.products.filter(p=>p.tenant_id!==tid); data.sales=data.sales.filter(s=>s.tenant_id!==tid); data.movements=data.movements.filter(m=>m.tenant_id!==tid); data.purchases=data.purchases.filter(p=>p.tenant_id!==tid); data.expenses=data.expenses.filter(e=>e.tenant_id!==tid); data.tenants=data.tenants.filter(x=>x.id!==tid); saveJson(); return true; },
   // Users
-  async createUser(o){ const u={ id:nextId('user'), tenant_id:o.tenant_id==null?null:Number(o.tenant_id), name:o.name, username:o.username||null, email:o.email||null, role:o.role||'tienda', password_hash:o.password_hash, password_salt:o.password_salt, status:o.status||'activo', last_login:null, created_at:new Date().toISOString() }; data.users.push(u); saveJson(); return u; },
+  async createUser(o){ const u={ id:nextId('user'), tenant_id:o.tenant_id==null?null:Number(o.tenant_id), branch_id:o.branch_id==null||o.branch_id===''?null:Number(o.branch_id), name:o.name, username:o.username||null, email:o.email||null, role:o.role||'tienda', password_hash:o.password_hash, password_salt:o.password_salt, status:o.status||'activo', last_login:null, created_at:new Date().toISOString() }; data.users.push(u); saveJson(); return u; },
   async getUserById(id){ return data.users.find(u=>u.id===Number(id)) || null; },
   async findUserByUsername(tenantId,username){ const un=String(username||'').trim().toLowerCase(); return data.users.find(u=>(tenantId==null? u.tenant_id==null : u.tenant_id===Number(tenantId)) && (u.username||'').trim().toLowerCase()===un) || null; },
-  async listUsers(){ return data.users.map(u=>({ id:u.id, name:u.name, username:u.username, email:u.email||null, role:u.role, tenant_id:u.tenant_id, status:u.status, last_login:u.last_login||null, tenant_name: u.tenant_id?((data.tenants.find(t=>t.id===u.tenant_id)||{}).name||null):null })); },
-  async updateUser(id,f){ const u=data.users.find(x=>x.id===Number(id)); if(!u) return null; if(f.status) u.status=f.status; if(f.name) u.name=f.name; if(f.role) u.role=f.role; if(f.username!==undefined) u.username=f.username; if(f.email!==undefined) u.email=f.email; if(f.last_login!==undefined) u.last_login=f.last_login; if(f.password_hash){ u.password_hash=f.password_hash; u.password_salt=f.password_salt; } saveJson(); return u; },
+  async listUsers(){ return data.users.map(u=>({ id:u.id, name:u.name, username:u.username, email:u.email||null, role:u.role, tenant_id:u.tenant_id, branch_id:u.branch_id||null, branch_name: u.branch_id?((data.branches.find(b=>b.id===u.branch_id)||{}).name||null):null, status:u.status, last_login:u.last_login||null, tenant_name: u.tenant_id?((data.tenants.find(t=>t.id===u.tenant_id)||{}).name||null):null })); },
+  async updateUser(id,f){ const u=data.users.find(x=>x.id===Number(id)); if(!u) return null; if(f.status) u.status=f.status; if(f.name) u.name=f.name; if(f.role) u.role=f.role; if(f.username!==undefined) u.username=f.username; if(f.email!==undefined) u.email=f.email; if(f.branch_id!==undefined) u.branch_id=f.branch_id==null||f.branch_id===''?null:Number(f.branch_id); if(f.last_login!==undefined) u.last_login=f.last_login; if(f.password_hash){ u.password_hash=f.password_hash; u.password_salt=f.password_salt; } saveJson(); return u; },
   async deleteUser(id){ const uid=Number(id); if(!data.users.find(u=>u.id===uid)) return false; data.sessions=data.sessions.filter(s=>s.user_id!==uid); data.users=data.users.filter(u=>u.id!==uid); saveJson(); return true; },
   async setLastLogin(id){ const u=data.users.find(x=>x.id===Number(id)); if(u){ u.last_login=new Date().toISOString(); saveJson(); } },
   // Sessions
@@ -250,6 +252,10 @@ const jsonRepo = {
   async openCashSession(tid,userId,branchId,opening){ if(data.cashSessions.find(s=>s.tenant_id===tid&&s.user_id===Number(userId)&&s.status==='abierta')) throw { code:'CAJA_ABIERTA', message:'Ya tienes una caja abierta' }; let bid; if(branchId!=null&&branchId!==''){ const b=data.branches.find(x=>x.id===Number(branchId)&&x.tenant_id===tid); if(!b) throw { code:'SUCURSAL_INVALIDA', message:'Sucursal no válida' }; bid=b.id; } else bid=jsonDefaultBranchId(tid); const s={ id:nextId('cashsession'), tenant_id:tid, branch_id:bid, user_id:Number(userId), opened_at:new Date().toISOString(), opening_amount:Number(opening)||0, closed_at:null, counted_amount:null, expected_amount:null, difference:null, status:'abierta', notes:'' }; data.cashSessions.push(s); saveJson(); return s; },
   async closeCashSession(id,tid,counted,notes){ const s=data.cashSessions.find(x=>x.id===Number(id)&&x.tenant_id===tid); if(!s) return null; if(s.status!=='abierta') throw { code:'CAJA_CERRADA', message:'La caja ya está cerrada' }; const cashIn=data.sales.filter(v=>v.cash_session_id===s.id && v.pay_method==='efectivo' && v.pay_status!=='credito').reduce((a,v)=>a+v.total,0); const cashOut=data.returns.filter(r=>r.cash_session_id===s.id && r.sale_pay_status!=='credito').reduce((a,r)=>a+r.total,0); const expected=Number(s.opening_amount)+cashIn-cashOut; s.counted_amount=Number(counted)||0; s.expected_amount=expected; s.difference=s.counted_amount-expected; s.closed_at=new Date().toISOString(); s.status='cerrada'; if(notes!==undefined) s.notes=notes||''; saveJson(); return s; },
   async cashSessionSummary(s){ const cashIn=data.sales.filter(v=>v.cash_session_id===s.id && v.pay_method==='efectivo' && v.pay_status!=='credito').reduce((a,v)=>a+v.total,0); const ventas=data.sales.filter(v=>v.cash_session_id===s.id).length; const cashOut=data.returns.filter(r=>r.cash_session_id===s.id && r.sale_pay_status!=='credito').reduce((a,r)=>a+r.total,0); return { cashIn, cashOut, ventas, expected:Number(s.opening_amount)+cashIn-cashOut }; },
+  // Facturas de servicio (suscripción)
+  async createServiceInvoice(o){ const id=nextId('sinvoice'); const inv={ id, tenant_id:Number(o.tenant_id), numero:'SVC-'+String(id).padStart(5,'0'), plan:o.plan||null, amount:Number(o.amount)||0, issued_at:new Date().toISOString(), due_date:o.due_date||null, status:o.status||'activo', email_to:o.email_to||null, sent:o.sent?1:0, created_at:new Date().toISOString() }; data.serviceInvoices.push(inv); saveJson(); return { ...inv, sent:!!inv.sent }; },
+  async listServiceInvoices(tid){ let rows=data.serviceInvoices; if(tid!=null) rows=rows.filter(x=>x.tenant_id===Number(tid)); return rows.slice().sort((a,b)=>b.id-a.id).map(x=>({ ...x, sent:!!x.sent })); },
+  async markInvoiceSent(id){ const x=data.serviceInvoices.find(s=>s.id===Number(id)); if(x){ x.sent=1; saveJson(); } },
   async createReturn(input,tid,userId){
     const sale=data.sales.find(s=>s.id===Number(input.sale_id)&&s.tenant_id===tid);
     if(!sale) throw { code:'VENTA_NO_EXISTE', message:'La venta no existe' };
@@ -293,6 +299,7 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS branch_stock (tenant_id INTEGER, product_id INTEGER, branch_id INTEGER, qty INTEGER DEFAULT 0, PRIMARY KEY(product_id, branch_id))`,
   `CREATE TABLE IF NOT EXISTS cash_sessions (id SERIAL PRIMARY KEY, tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE, branch_id INTEGER, user_id INTEGER, opened_at TIMESTAMPTZ DEFAULT now(), opening_amount NUMERIC DEFAULT 0, closed_at TIMESTAMPTZ, counted_amount NUMERIC, expected_amount NUMERIC, difference NUMERIC, status TEXT DEFAULT 'abierta', notes TEXT DEFAULT '')`,
   `CREATE TABLE IF NOT EXISTS password_resets (token TEXT PRIMARY KEY, user_id INTEGER, expires_at BIGINT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS service_invoices (id SERIAL PRIMARY KEY, tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE, numero TEXT, plan TEXT, amount NUMERIC DEFAULT 0, issued_at TIMESTAMPTZ DEFAULT now(), due_date DATE, status TEXT DEFAULT 'activo', email_to TEXT, sent INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now())`,
   `CREATE TABLE IF NOT EXISTS movements (id SERIAL PRIMARY KEY, tenant_id INTEGER, product_id INTEGER, type TEXT, qty INTEGER, ref TEXT, created_at TIMESTAMPTZ DEFAULT now())`,
   `CREATE TABLE IF NOT EXISTS purchases (id SERIAL PRIMARY KEY, tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE, user_id INTEGER, numero TEXT, fecha TIMESTAMPTZ DEFAULT now(), proveedor TEXT, total NUMERIC, pay_status TEXT DEFAULT 'pagada', items JSONB DEFAULT '[]', created_at TIMESTAMPTZ DEFAULT now())`,
   `CREATE TABLE IF NOT EXISTS expenses (id SERIAL PRIMARY KEY, tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE, user_id INTEGER, fecha TIMESTAMPTZ DEFAULT now(), categoria TEXT, descripcion TEXT, monto NUMERIC, created_at TIMESTAMPTZ DEFAULT now())`,
@@ -318,7 +325,10 @@ const MIGRATIONS = [
   `ALTER TABLE purchases ADD COLUMN IF NOT EXISTS branch_id INTEGER`,
   `ALTER TABLE movements ADD COLUMN IF NOT EXISTS branch_id INTEGER`,
   `ALTER TABLE sales ADD COLUMN IF NOT EXISTS cash_session_id INTEGER`,
-  `ALTER TABLE returns ADD COLUMN IF NOT EXISTS cash_session_id INTEGER`
+  `ALTER TABLE returns ADD COLUMN IF NOT EXISTS cash_session_id INTEGER`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan TEXT`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_cost NUMERIC DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id INTEGER`
 ];
 // Índices y restricciones (se aplican con try/catch: los UNIQUE pueden fallar sobre datos sucios preexistentes)
 const INDEXES = [
@@ -343,13 +353,16 @@ const INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_cash_sessions_tenant ON cash_sessions(tenant_id, id DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_cash_sessions_open ON cash_sessions(tenant_id, user_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_sales_cash ON sales(cash_session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_sinvoices_tenant ON service_invoices(tenant_id, id DESC)`,
   // Unicidad de usuario por empresa (case-insensitive). tenant_id NULL (súper-admin) agrupado como 0.
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_users_tenant_username ON users(COALESCE(tenant_id,0), lower(btrim(username))) WHERE username IS NOT NULL`,
   // Unicidad de nombre de empresa (case-insensitive)
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_name ON tenants(lower(btrim(name)))`
 ];
 const iso = v => (v instanceof Date ? v.toISOString() : v);
-function mapTenant(r){ return { id:r.id, name:r.name, code:r.code||null, nit:r.nit, email:r.email||null, contacto:r.contacto||null, telefono:r.telefono||null, vence: r.vence? (r.vence instanceof Date? r.vence.toISOString().slice(0,10) : String(r.vence).slice(0,10)) : null, logo:r.logo||null, status:r.status, created_at:iso(r.created_at) }; }
+function mapTenant(r){ return { id:r.id, name:r.name, code:r.code||null, nit:r.nit, email:r.email||null, contacto:r.contacto||null, telefono:r.telefono||null, vence: r.vence? (r.vence instanceof Date? r.vence.toISOString().slice(0,10) : String(r.vence).slice(0,10)) : null, plan:r.plan||null, plan_cost:Number(r.plan_cost)||0, logo:r.logo||null, status:r.status, dias_restantes:diasRestantes(r.vence), created_at:iso(r.created_at) }; }
+function diasRestantes(vence){ if(!vence) return null; const d=String(vence instanceof Date?vence.toISOString():vence).slice(0,10); const v=new Date(d+'T00:00:00'); const t=new Date(); t.setHours(0,0,0,0); return Math.round((v-t)/86400000); }
+function mapServiceInvoice(r){ return { id:r.id, tenant_id:r.tenant_id, numero:r.numero, plan:r.plan||null, amount:Number(r.amount)||0, issued_at:iso(r.issued_at), due_date: r.due_date? (r.due_date instanceof Date? r.due_date.toISOString().slice(0,10): String(r.due_date).slice(0,10)) : null, status:r.status||'activo', email_to:r.email_to||null, sent:!!r.sent, created_at:iso(r.created_at) }; }
 function mapProduct(r){ return { id:r.id, tenant_id:r.tenant_id, sku:r.sku, barcode:r.barcode, name:r.name, brand:r.brand, category:r.category, type:r.type, emoji:r.emoji, price:Number(r.price), cost:Number(r.cost), stock:Number(r.stock), stock_min:Number(r.stock_min), device:Number(r.device), compat: Array.isArray(r.compat)?r.compat:(r.compat||[]), created_at:iso(r.created_at), updated_at:iso(r.updated_at) }; }
 function mapSale(r){ return { id:r.id, tenant_id:r.tenant_id, user_id:r.user_id, numero:r.numero, fecha:iso(r.fecha), subtotal:Number(r.subtotal), iva:Number(r.iva), total:Number(r.total), pay_method:r.pay_method, customer:r.customer, customer_id: r.customer_id!=null?Number(r.customer_id):null, branch_id: r.branch_id!=null?Number(r.branch_id):null, cash_session_id: r.cash_session_id!=null?Number(r.cash_session_id):null, pay_status:r.pay_status||'pagada', items: r.items||[], created_at:iso(r.created_at) }; }
 function mapPurchase(r){ return { id:r.id, tenant_id:r.tenant_id, user_id:r.user_id, numero:r.numero, fecha:iso(r.fecha), proveedor:r.proveedor, total:Number(r.total), pay_status:r.pay_status||'pagada', branch_id: r.branch_id!=null?Number(r.branch_id):null, items: r.items||[], created_at:iso(r.created_at) }; }
@@ -387,19 +400,19 @@ const pgRepo = {
   async logAudit(e){ const r=await q(`INSERT INTO audit_log(actor_user_id,actor_name,actor_role,tenant_id,action,entity,entity_id,detail,ip) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[e.actor_user_id==null?null:Number(e.actor_user_id),e.actor_name||null,e.actor_role||null,e.tenant_id==null?null:Number(e.tenant_id),e.action,e.entity||null,e.entity_id==null?null:Number(e.entity_id),e.detail||null,e.ip||null]); return r.rows[0]; },
   async listAudit({ tenant_id=null, limit=200 }={}){ const lim=Math.max(1,Number(limit)||200); let r; if(tenant_id!=null) r=await q('SELECT * FROM audit_log WHERE tenant_id=$1 ORDER BY id DESC LIMIT $2',[Number(tenant_id),lim]); else r=await q('SELECT * FROM audit_log ORDER BY id DESC LIMIT $1',[lim]); return r.rows.map(x=>({ ...x, ts: x.ts instanceof Date? x.ts.toISOString(): x.ts })); },
   // Tenants
-  async createTenant(o){ const r=await q(`INSERT INTO tenants(name,code,nit,email,contacto,telefono,vence,logo) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[o.name,(o.code||'').toUpperCase()||null,o.nit||'',o.email||null,o.contacto||null,o.telefono||null,o.vence||null,o.logo||null]); const t=mapTenant(r.rows[0]); await q(`INSERT INTO branches(tenant_id,name) VALUES($1,'Principal')`,[t.id]); return t; },
+  async createTenant(o){ const r=await q(`INSERT INTO tenants(name,code,nit,email,contacto,telefono,vence,plan,plan_cost,logo) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[o.name,(o.code||'').toUpperCase()||null,o.nit||'',o.email||null,o.contacto||null,o.telefono||null,o.vence||null,o.plan||null,Number(o.plan_cost)||0,o.logo||null]); const t=mapTenant(r.rows[0]); await q(`INSERT INTO branches(tenant_id,name) VALUES($1,'Principal')`,[t.id]); return t; },
   async getTenant(id){ const r=await q('SELECT * FROM tenants WHERE id=$1',[Number(id)]); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async findTenantByCode(code){ const r=await q('SELECT * FROM tenants WHERE upper(code)=upper($1) LIMIT 1',[String(code||'')]); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async findTenantByName(name){ const r=await q('SELECT * FROM tenants WHERE lower(btrim(name))=lower(btrim($1)) LIMIT 1',[String(name||'')]); return r.rows[0]?mapTenant(r.rows[0]):null; },
-  async listTenants(){ const t=await q('SELECT id,name,code,nit,email,contacto,telefono,vence,logo,status,created_at FROM tenants ORDER BY id'); const uc=await q('SELECT tenant_id, COUNT(*) AS c FROM users WHERE tenant_id IS NOT NULL GROUP BY tenant_id'); const pc=await q('SELECT tenant_id, COUNT(*) AS c FROM products GROUP BY tenant_id'); const um={},pm={}; uc.rows.forEach(r=>{ um[r.tenant_id]=Number(r.c); }); pc.rows.forEach(r=>{ pm[r.tenant_id]=Number(r.c); }); return t.rows.map(x=>({ ...mapTenant(x), users:um[x.id]||0, products:pm[x.id]||0 })); },
-  async updateTenant(id,f){ const sets=[],vals=[]; let i=1; const fx={...f}; if(fx.code!==undefined) fx.code=(fx.code||'').toUpperCase()||null; if(fx.vence!==undefined) fx.vence=fx.vence||null; ['status','name','nit','email','contacto','telefono','vence','logo','code'].forEach(k=>{ if(fx[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(fx[k]); } }); if(!sets.length) return this.getTenant(id); vals.push(Number(id)); const r=await q(`UPDATE tenants SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,vals); return r.rows[0]?mapTenant(r.rows[0]):null; },
+  async listTenants(){ try{ await q("UPDATE tenants SET status='inactivo' WHERE status='activo' AND vence IS NOT NULL AND vence < CURRENT_DATE"); }catch(e){} const t=await q('SELECT * FROM tenants ORDER BY id'); const uc=await q('SELECT tenant_id, COUNT(*) AS c FROM users WHERE tenant_id IS NOT NULL GROUP BY tenant_id'); const pc=await q('SELECT tenant_id, COUNT(*) AS c FROM products GROUP BY tenant_id'); const um={},pm={}; uc.rows.forEach(r=>{ um[r.tenant_id]=Number(r.c); }); pc.rows.forEach(r=>{ pm[r.tenant_id]=Number(r.c); }); return t.rows.map(x=>({ ...mapTenant(x), users:um[x.id]||0, products:pm[x.id]||0 })); },
+  async updateTenant(id,f){ const sets=[],vals=[]; let i=1; const fx={...f}; if(fx.code!==undefined) fx.code=(fx.code||'').toUpperCase()||null; if(fx.vence!==undefined) fx.vence=fx.vence||null; ['status','name','nit','email','contacto','telefono','vence','plan','plan_cost','logo','code'].forEach(k=>{ if(fx[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(fx[k]); } }); if(!sets.length) return this.getTenant(id); vals.push(Number(id)); const r=await q(`UPDATE tenants SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,vals); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async deleteTenant(id){ const r=await q('DELETE FROM tenants WHERE id=$1',[Number(id)]); return r.rowCount>0; },
   // Users
-  async createUser(o){ const r=await q(`INSERT INTO users(tenant_id,name,username,email,role,password_hash,password_salt,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[o.tenant_id==null?null:Number(o.tenant_id),o.name,o.username||null,o.email||null,o.role||'tienda',o.password_hash,o.password_salt,o.status||'activo']); return r.rows[0]; },
+  async createUser(o){ const r=await q(`INSERT INTO users(tenant_id,branch_id,name,username,email,role,password_hash,password_salt,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[o.tenant_id==null?null:Number(o.tenant_id),(o.branch_id==null||o.branch_id==='')?null:Number(o.branch_id),o.name,o.username||null,o.email||null,o.role||'tienda',o.password_hash,o.password_salt,o.status||'activo']); return r.rows[0]; },
   async getUserById(id){ const r=await q('SELECT * FROM users WHERE id=$1',[Number(id)]); return r.rows[0]||null; },
   async findUserByUsername(tenantId,username){ const un=String(username||''); const r=(tenantId==null)?await q('SELECT * FROM users WHERE tenant_id IS NULL AND lower(btrim(username))=lower(btrim($1)) LIMIT 1',[un]):await q('SELECT * FROM users WHERE tenant_id=$1 AND lower(btrim(username))=lower(btrim($2)) LIMIT 1',[Number(tenantId),un]); return r.rows[0]||null; },
-  async listUsers(){ const r=await q(`SELECT u.id,u.name,u.username,u.email,u.role,u.tenant_id,u.status,u.last_login, t.name AS tenant_name FROM users u LEFT JOIN tenants t ON t.id=u.tenant_id ORDER BY u.id`); return r.rows.map(u=>({ ...u, last_login: u.last_login? iso(u.last_login): null })); },
-  async updateUser(id,f){ const sets=[],vals=[]; let i=1; ['status','name','role','username','email','last_login','password_hash','password_salt'].forEach(k=>{ if(f[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(f[k]); } }); if(!sets.length) return this.getUserById(id); vals.push(Number(id)); const r=await q(`UPDATE users SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,vals); return r.rows[0]||null; },
+  async listUsers(){ const r=await q(`SELECT u.id,u.name,u.username,u.email,u.role,u.tenant_id,u.branch_id,u.status,u.last_login, t.name AS tenant_name, b.name AS branch_name FROM users u LEFT JOIN tenants t ON t.id=u.tenant_id LEFT JOIN branches b ON b.id=u.branch_id ORDER BY u.id`); return r.rows.map(u=>({ ...u, last_login: u.last_login? iso(u.last_login): null })); },
+  async updateUser(id,f){ const sets=[],vals=[]; let i=1; ['status','name','role','username','email','branch_id','last_login','password_hash','password_salt'].forEach(k=>{ if(f[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(f[k]); } }); if(!sets.length) return this.getUserById(id); vals.push(Number(id)); const r=await q(`UPDATE users SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,vals); return r.rows[0]||null; },
   async deleteUser(id){ const r=await q('DELETE FROM users WHERE id=$1',[Number(id)]); return r.rowCount>0; },
   async setLastLogin(id){ await q('UPDATE users SET last_login=now() WHERE id=$1',[Number(id)]); },
   // Sessions
@@ -551,6 +564,10 @@ const pgRepo = {
   async openCashSession(tid,userId,branchId,opening){ const ex=await q("SELECT 1 FROM cash_sessions WHERE tenant_id=$1 AND user_id=$2 AND status='abierta' LIMIT 1",[tid,Number(userId)]); if(ex.rows[0]) throw { code:'CAJA_ABIERTA', message:'Ya tienes una caja abierta' }; let bid; if(branchId!=null&&branchId!==''){ const b=await q('SELECT id FROM branches WHERE id=$1 AND tenant_id=$2',[Number(branchId),tid]); if(!b.rows[0]) throw { code:'SUCURSAL_INVALIDA', message:'Sucursal no válida' }; bid=b.rows[0].id; } else bid=await this.defaultBranchId(tid); const r=await q(`INSERT INTO cash_sessions(tenant_id,branch_id,user_id,opening_amount) VALUES($1,$2,$3,$4) RETURNING *`,[tid,bid,Number(userId),Number(opening)||0]); return mapCashSession(r.rows[0]); },
   async closeCashSession(id,tid,counted,notes){ const r0=await q('SELECT * FROM cash_sessions WHERE id=$1 AND tenant_id=$2',[Number(id),tid]); const s=r0.rows[0]; if(!s) return null; if(s.status!=='abierta') throw { code:'CAJA_CERRADA', message:'La caja ya está cerrada' }; const ci=await q("SELECT COALESCE(SUM(total),0) AS s FROM sales WHERE cash_session_id=$1 AND pay_method='efectivo' AND pay_status<>'credito'",[s.id]); const co=await q("SELECT COALESCE(SUM(total),0) AS s FROM returns WHERE cash_session_id=$1 AND sale_pay_status<>'credito'",[s.id]); const expected=Number(s.opening_amount)+Number(ci.rows[0].s)-Number(co.rows[0].s); const cnt=Number(counted)||0; const r=await q("UPDATE cash_sessions SET counted_amount=$1, expected_amount=$2, difference=$3, closed_at=now(), status='cerrada', notes=$4 WHERE id=$5 RETURNING *",[cnt,expected,cnt-expected,notes||'',s.id]); return mapCashSession(r.rows[0]); },
   async cashSessionSummary(s){ const ci=await q("SELECT COALESCE(SUM(total),0) AS s FROM sales WHERE cash_session_id=$1 AND pay_method='efectivo' AND pay_status<>'credito'",[s.id]); const av=await q('SELECT COUNT(*) AS c FROM sales WHERE cash_session_id=$1',[s.id]); const co=await q("SELECT COALESCE(SUM(total),0) AS s FROM returns WHERE cash_session_id=$1 AND sale_pay_status<>'credito'",[s.id]); const cashIn=Number(ci.rows[0].s), cashOut=Number(co.rows[0].s); return { cashIn, cashOut, ventas:Number(av.rows[0].c), expected:Number(s.opening_amount)+cashIn-cashOut }; },
+  // Facturas de servicio (suscripción)
+  async createServiceInvoice(o){ const r=await q(`INSERT INTO service_invoices(tenant_id,numero,plan,amount,due_date,status,email_to,sent) VALUES($1,'TMP',$2,$3,$4,$5,$6,$7) RETURNING *`,[Number(o.tenant_id),o.plan||null,Number(o.amount)||0,o.due_date||null,o.status||'activo',o.email_to||null,o.sent?1:0]); const inv=r.rows[0]; const numero='SVC-'+String(inv.id).padStart(5,'0'); await q('UPDATE service_invoices SET numero=$1 WHERE id=$2',[numero,inv.id]); inv.numero=numero; return mapServiceInvoice(inv); },
+  async listServiceInvoices(tid){ let r; if(tid!=null) r=await q('SELECT * FROM service_invoices WHERE tenant_id=$1 ORDER BY id DESC',[Number(tid)]); else r=await q('SELECT * FROM service_invoices ORDER BY id DESC'); return r.rows.map(mapServiceInvoice); },
+  async markInvoiceSent(id){ await q('UPDATE service_invoices SET sent=1 WHERE id=$1',[Number(id)]); },
   async createReturn(input,tid,userId){
     const client=await pool.connect();
     try{
@@ -613,13 +630,13 @@ async function seedIfEmpty(){
   // si no existen, se generan aleatorias fuertes y se imprimen una sola vez al sembrar.
   const superPass = process.env.SEED_SUPER_PASS || crypto.randomBytes(9).toString('base64url');
   const demoPass  = process.env.SEED_DEMO_PASS  || crypto.randomBytes(9).toString('base64url');
-  await seedUser({ tenant_id:null, name:'Súper Admin', username:'Súper Admin', role:'superadmin', password:superPass });
+  await seedUser({ tenant_id:null, name:'Soporte', username:'Soporte', role:'superadmin', password:superPass });
   const demo=await repo.createTenant({ name:'JEROTECH', nit:'901.234.567', email:'contacto@jerotech.co' });
   await seedUser({ tenant_id:demo.id, name:'DEMO', username:'DEMO', role:'admin', password:demoPass });
   for(const p of seedProducts) await repo.createProduct(p, demo.id);
   console.log('==================================================================');
   console.log('SEMILLA CREADA — credenciales iniciales (CÁMBIALAS al primer ingreso):');
-  console.log('  Súper Admin  -> empresa: Nexo      usuario: Súper Admin   clave: '+(process.env.SEED_SUPER_PASS?'(SEED_SUPER_PASS)':superPass));
+  console.log('  Soporte      -> empresa: Nexo      usuario: Soporte       clave: '+(process.env.SEED_SUPER_PASS?'(SEED_SUPER_PASS)':superPass));
   console.log('  Demo (admin) -> empresa: JEROTECH  usuario: DEMO          clave: '+(process.env.SEED_DEMO_PASS ?'(SEED_DEMO_PASS)' :demoPass));
   console.log('==================================================================');
 }
@@ -694,7 +711,17 @@ function logAction(req, action, extra){
     })).catch(()=>{});
   }catch(e){}
 }
-async function newUser(b){ const hp=hashPw(b.password||'changeme'); const username=String(b.username||'').trim(); return repo.createUser({ tenant_id: b.role==='superadmin'?null:Number(b.tenant_id), name:(b.name&&b.name.trim())||username, username, email:b.email||null, role:b.role||'tienda', password_hash:hp.hash, password_salt:hp.salt, status:'activo' }); }
+// Emite una factura de servicio para una empresa y la envía a su correo (stub si no hay SMTP)
+async function emitirFacturaServicio(tenant){
+  const inv=await repo.createServiceInvoice({ tenant_id:tenant.id, plan:tenant.plan, amount:tenant.plan_cost, due_date:tenant.vence, status:tenant.status, email_to:tenant.email });
+  if(tenant.email){
+    const body=[`Factura de servicio ${inv.numero}`,`Empresa: ${tenant.name}`,`Plan: ${tenant.plan||'—'}`,`Valor del plan: ${inv.amount}`,`Fecha de pago: ${String(inv.issued_at).slice(0,10)}`,`Fecha de vencimiento: ${inv.due_date||'—'}`,`Estado del servicio: ${inv.status}`].join('\n');
+    const r=await sendEmail(tenant.email, `Factura de servicio ${inv.numero} - ${tenant.name}`, body);
+    if(r.sent){ try{ await repo.markInvoiceSent(inv.id); }catch(e){} inv.sent=true; }
+  }
+  return inv;
+}
+async function newUser(b){ const hp=hashPw(b.password||'changeme'); const username=String(b.username||'').trim(); return repo.createUser({ tenant_id: b.role==='superadmin'?null:Number(b.tenant_id), branch_id: b.role==='superadmin'?null:(b.branch_id||null), name:(b.name&&b.name.trim())||username, username, email:b.email||null, role:b.role||'tienda', password_hash:hp.hash, password_salt:hp.salt, status:'activo' }); }
 // Verifica la contraseña del usuario en sesión (confirmación de acciones sensibles)
 function confirmPw(req){ return verifyPw(String((req.body&&req.body.confirm_password)||''), req.user.password_hash, req.user.password_salt); }
 // Ejecuta fn con contexto elevado (lee todo): para login y validación de sesión
@@ -935,9 +962,10 @@ api.post('/tenants', authMw, superMw, h(async (req,res)=>{
   if(name.toLowerCase()==='nexo') return res.status(400).json({ error:{ code:'NOMBRE_RESERVADO', message:'El nombre "Nexo" está reservado' } });
   if(await repo.findTenantByName(name)) return res.status(409).json({ error:{ code:'NOMBRE_EXISTE', message:'Ya existe una empresa con ese nombre' } });
   if(b.logo && String(b.logo).length>900000) return res.status(400).json({ error:{ code:'LOGO_GRANDE', message:'El logo es muy pesado (usa una imagen más liviana)' } });
-  const created=await repo.createTenant({ name, nit:b.nit||'', email:b.email||null, contacto:b.contacto||null, telefono:b.telefono||null, vence:b.vence||null, logo:b.logo||null });
-  logAction(req,'tenant_create',{ entity:'tenant', entity_id:created.id, detail:{ name } });
-  res.status(201).json(created);
+  const created=await repo.createTenant({ name, nit:b.nit||'', email:b.email||null, contacto:b.contacto||null, telefono:b.telefono||null, vence:b.vence||null, plan:b.plan||null, plan_cost:b.plan_cost||0, logo:b.logo||null });
+  logAction(req,'tenant_create',{ entity:'tenant', entity_id:created.id, detail:{ name, plan:created.plan, plan_cost:created.plan_cost } });
+  let factura=null; try{ factura=await emitirFacturaServicio(created); logAction(req,'service_invoice',{ entity:'tenant', entity_id:created.id, detail:{ numero:factura.numero, amount:factura.amount } }); }catch(e){ console.error('Factura servicio:', e.message); }
+  res.status(201).json({ ...created, factura });
 }));
 api.patch('/tenants/:id', authMw, superMw, h(async (req,res)=>{
   if(!confirmPw(req)) return res.status(403).json({ error:{ code:'PW_INCORRECTA', message:'Contraseña incorrecta' } });
@@ -951,7 +979,7 @@ api.patch('/tenants/:id', authMw, superMw, h(async (req,res)=>{
     if(name.trim().toLowerCase()!==String(cur.name).trim().toLowerCase()){ const dup=await repo.findTenantByName(name); if(dup && dup.id!==cur.id) return res.status(409).json({ error:{ code:'NOMBRE_EXISTE', message:'Ya existe una empresa con ese nombre' } }); }
   }
   if(b.logo && String(b.logo).length>900000) return res.status(400).json({ error:{ code:'LOGO_GRANDE', message:'El logo es muy pesado' } });
-  const f={}; ['name','nit','email','contacto','telefono','vence','logo','status'].forEach(k=>{ if(b[k]!==undefined) f[k]=b[k]; });
+  const f={}; ['name','nit','email','contacto','telefono','vence','plan','plan_cost','logo','status'].forEach(k=>{ if(b[k]!==undefined) f[k]=b[k]; });
   const t=await repo.updateTenant(req.params.id, f);
   logAction(req,'tenant_update',{ entity:'tenant', entity_id:Number(req.params.id), detail:{ fields:Object.keys(f) } });
   res.json(t);
@@ -976,6 +1004,11 @@ api.post('/tenants/:id/impersonate', authMw, superMw, h(async (req,res)=>{
   logAction(req,'impersonate',{ entity:'tenant', entity_id:tid, detail:{ empresa:t.name, target_user:full.id } });
   res.json({ token, user: await toPublicUser(full), empresa:t.name });
 }));
+// Facturación de servicio (suscripción) — súper-admin
+api.post('/tenants/:id/invoice', authMw, superMw, h(async (req,res)=>{ const t=await repo.getTenant(req.params.id); if(!t) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Empresa no encontrada' } }); const inv=await emitirFacturaServicio(t); logAction(req,'service_invoice',{ entity:'tenant', entity_id:Number(req.params.id), detail:{ numero:inv.numero, amount:inv.amount } }); res.status(201).json(inv); }));
+api.get('/tenants/:id/invoices', authMw, superMw, h(async (req,res)=>res.json(await repo.listServiceInvoices(req.params.id))));
+api.get('/tenants/:id/branches', authMw, superMw, h(async (req,res)=>res.json(await repo.listBranches(Number(req.params.id)))));
+api.get('/service-invoices', authMw, superMw, h(async (req,res)=>res.json(await repo.listServiceInvoices(null))));
 api.get('/users', authMw, superMw, h(async (req,res)=>res.json(await repo.listUsers())));
 api.post('/users', authMw, superMw, h(async (req,res)=>{
   const b=req.body||{};
@@ -1030,7 +1063,7 @@ api.post('/company/users', authMw, storeMw, adminMw, h(async (req,res)=>{
   if(String(b.password).length<8) return res.status(400).json({ error:{ code:'VALIDACION', message:'La contraseña debe tener al menos 8 caracteres' } });
   if(await repo.findUserByUsername(req.user.tenant_id, b.username)) return res.status(409).json({ error:{ code:'USUARIO_EXISTE', message:'Ya existe ese usuario en tu empresa' } });
   const role=(b.role==='admin')?'admin':'tienda';
-  const u=await newUser({ name:b.name, username:b.username, email:b.email||null, password:b.password, role, tenant_id:req.user.tenant_id });
+  const u=await newUser({ name:b.name, username:b.username, email:b.email||null, password:b.password, role, tenant_id:req.user.tenant_id, branch_id:b.branch_id });
   logAction(req,'user_create',{ entity:'user', entity_id:u.id, detail:{ username:u.username, role } });
   res.status(201).json(await toPublicUser(u));
 }));
@@ -1041,6 +1074,7 @@ api.patch('/company/users/:id', authMw, storeMw, adminMw, h(async (req,res)=>{
   if(req.body.name!==undefined) f.name=req.body.name;
   if(req.body.role!==undefined){ if(req.body.role!=='admin' && req.body.role!=='tienda') return res.status(400).json({ error:{ code:'ROL_INVALIDO', message:'Rol no válido' } }); f.role=req.body.role; }
   if(req.body.status!==undefined) f.status=req.body.status;
+  if(req.body.branch_id!==undefined) f.branch_id=req.body.branch_id;
   if(target.id===req.user.id && ((f.status && f.status!=='activo') || (f.role && f.role!=='admin'))) return res.status(400).json({ error:{ code:'AUTO_BLOQUEO', message:'No puedes desactivar ni cambiar tu propio rol' } });
   if(req.body.password){ if(String(req.body.password).length<8) return res.status(400).json({ error:{ code:'VALIDACION', message:'La contraseña debe tener al menos 8 caracteres' } }); const hp=hashPw(req.body.password); f.password_hash=hp.hash; f.password_salt=hp.salt; }
   const u=await repo.updateUser(target.id, f);
