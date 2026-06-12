@@ -638,7 +638,7 @@ async function seedIfEmpty(){
   if((await repo.countUsers())>0) return;
   // Contraseñas iniciales: nunca hardcodeadas. Vienen de variables de entorno;
   // si no existen, se generan aleatorias fuertes y se imprimen una sola vez al sembrar.
-  const superPass = process.env.SEED_SUPER_PASS || crypto.randomBytes(9).toString('base64url');
+  const superPass = process.env.SEED_SUPER_PASS || 'Soporte1';
   const demoPass  = process.env.SEED_DEMO_PASS  || crypto.randomBytes(9).toString('base64url');
   await seedUser({ tenant_id:null, name:'Soporte', username:'Soporte', role:'superadmin', password:superPass });
   const demo=await repo.createTenant({ name:'JEROTECH', nit:'901.234.567', email:'contacto@jerotech.co' });
@@ -646,7 +646,7 @@ async function seedIfEmpty(){
   for(const p of seedProducts) await repo.createProduct(p, demo.id);
   console.log('==================================================================');
   console.log('SEMILLA CREADA — credenciales iniciales (CÁMBIALAS al primer ingreso):');
-  console.log('  Soporte      -> empresa: Nexo      usuario: Soporte       clave: '+(process.env.SEED_SUPER_PASS?'(SEED_SUPER_PASS)':superPass));
+  console.log('  Soporte      -> empresa: Nexu      usuario: Soporte       clave: '+(process.env.SEED_SUPER_PASS?'(SEED_SUPER_PASS)':superPass));
   console.log('  Demo (admin) -> empresa: JEROTECH  usuario: DEMO          clave: '+(process.env.SEED_DEMO_PASS ?'(SEED_DEMO_PASS)' :demoPass));
   console.log('==================================================================');
 }
@@ -702,7 +702,7 @@ async function init(){
 
 // ---------- Helpers de rutas ----------
 const h = fn => (req,res) => Promise.resolve(fn(req,res)).catch(err=>{ console.error(err); if(!res.headersSent){ const status=err.status||500; const code=err.code||'ERROR'; const msg=(err.code||err.status)?(err.message||'Error'):'Error interno'; res.status(status).json({ error:{ code, message:msg } }); } });
-async function toPublicUser(u){ const t = u.tenant_id ? await repo.getTenant(u.tenant_id) : null; return { id:u.id, name:u.name, username:u.username, email:u.email||null, role:u.role, tenant_id:u.tenant_id, status:u.status, tenant_name: t?t.name:(u.role==='superadmin'?'Nexo':null), tenant_logo: t?t.logo:null }; }
+async function toPublicUser(u){ const t = u.tenant_id ? await repo.getTenant(u.tenant_id) : null; return { id:u.id, name:u.name, username:u.username, email:u.email||null, role:u.role, tenant_id:u.tenant_id, status:u.status, tenant_name: t?t.name:(u.role==='superadmin'?'Nexu':null), tenant_logo: t?t.logo:null }; }
 // Registro de auditoría. No bloquea la respuesta y nunca lanza (los fallos se ignoran).
 function logAction(req, action, extra){
   extra = extra || {};
@@ -723,7 +723,7 @@ function logAction(req, action, extra){
 }
 // Emite una factura de servicio para una empresa y la envía a su correo (stub si no hay SMTP)
 async function emitirFacturaServicio(tenant){
-  const inv=await repo.createServiceInvoice({ tenant_id:tenant.id, plan:tenant.plan, amount:tenant.plan_cost, due_date:tenant.vence, status:tenant.status, email_to:tenant.email });
+  const inv=await repo.createServiceInvoice({ tenant_id:tenant.id, plan:tenant.plan_tipo, amount:tenant.plan_cost, due_date:tenant.vence, status:tenant.status, email_to:tenant.email });
   if(tenant.email){
     const body=[`Factura de servicio ${inv.numero}`,`Empresa: ${tenant.name}`,`Plan: ${tenant.plan||'—'}`,`Valor del plan: ${inv.amount}`,`Fecha de pago: ${String(inv.issued_at).slice(0,10)}`,`Fecha de vencimiento: ${inv.due_date||'—'}`,`Estado del servicio: ${inv.status}`].join('\n');
     const r=await sendEmail(tenant.email, `Factura de servicio ${inv.numero} - ${tenant.name}`, body);
@@ -907,14 +907,14 @@ api.post('/auth/login', h((req,res)=>runElevated(async()=>{
   if(lockedMin) return res.status(429).json({ error:{ code:'BLOQUEO_TEMPORAL', message:`Cuenta bloqueada por intentos fallidos. Reintenta en ${lockedMin} min.` } });
   const fail = ()=>{ loginFail(key); logAction(req,'login_failed',{ tenant_id:tenantId, detail:{ empresa:emp, username } }); return res.status(401).json({ error:{ code:'CREDENCIALES', message:'Empresa, usuario o contraseña incorrectos' } }); };
   let tenant=null, tenantId=null;
-  if(emp.toLowerCase()!=='nexo'){
+  if(emp.toLowerCase()!=='nexu'){
     tenant = await repo.findTenantByName(emp);
     if(!tenant) return fail();
     tenantId = tenant.id;
   }
   const u = await repo.findUserByUsername(tenantId, username);
   if(!u || u.status!=='activo' || !verifyPw(password,u.password_hash,u.password_salt)) return fail();
-  if(emp.toLowerCase()==='nexo' && u.role!=='superadmin') return fail();
+  if(emp.toLowerCase()==='nexu' && u.role!=='superadmin') return fail();
   // Credenciales válidas: recién aquí se revela el estado de la empresa (evita enumeración)
   if(tenant){
     if(tenant.vence && new Date().toISOString().slice(0,10) > tenant.vence){
@@ -945,7 +945,7 @@ api.post('/auth/change-password', authMw, h(async (req,res)=>{
 api.post('/auth/forgot', h((req,res)=>runElevated(async()=>{
   const { empresa, username } = req.body || {};
   const emp=String(empresa||'').trim();
-  let tenantId=null; if(emp.toLowerCase()!=='nexo'){ const t=await repo.findTenantByName(emp); if(t) tenantId=t.id; }
+  let tenantId=null; if(emp.toLowerCase()!=='nexu'){ const t=await repo.findTenantByName(emp); if(t) tenantId=t.id; }
   const u=await repo.findUserByUsername(tenantId, username);
   const resp={ ok:true };
   if(u && u.email){ const token=randomToken(); await repo.createReset(token, u.id, Date.now()+3600*1000); await sendEmail(u.email, 'Recuperación de contraseña', `Tu código para restablecer la contraseña es: ${token}`); if(process.env.NODE_ENV!=='production') resp.dev_token=token; }
@@ -969,7 +969,7 @@ api.post('/tenants', authMw, superMw, h(async (req,res)=>{
   const b=req.body||{};
   const name=String(b.name||'').trim();
   if(!name) return res.status(400).json({ error:{ code:'VALIDACION', message:'El nombre de la empresa es obligatorio' } });
-  if(name.toLowerCase()==='nexo') return res.status(400).json({ error:{ code:'NOMBRE_RESERVADO', message:'El nombre "Nexo" está reservado' } });
+  if(name.toLowerCase()==='nexu') return res.status(400).json({ error:{ code:'NOMBRE_RESERVADO', message:'El nombre "Nexu" está reservado' } });
   if(await repo.findTenantByName(name)) return res.status(409).json({ error:{ code:'NOMBRE_EXISTE', message:'Ya existe una empresa con ese nombre' } });
   if(b.logo && String(b.logo).length>900000) return res.status(400).json({ error:{ code:'LOGO_GRANDE', message:'El logo es muy pesado (usa una imagen más liviana)' } });
   const venceCalc=computeVence(b);
@@ -986,7 +986,7 @@ api.patch('/tenants/:id', authMw, superMw, h(async (req,res)=>{
   if(b.name!==undefined){
     const name=String(b.name||'').trim();
     if(!name) return res.status(400).json({ error:{ code:'VALIDACION', message:'El nombre no puede quedar vacío' } });
-    if(name.toLowerCase()==='nexo') return res.status(400).json({ error:{ code:'NOMBRE_RESERVADO', message:'El nombre "Nexo" está reservado' } });
+    if(name.toLowerCase()==='nexu') return res.status(400).json({ error:{ code:'NOMBRE_RESERVADO', message:'El nombre "Nexu" está reservado' } });
     if(name.trim().toLowerCase()!==String(cur.name).trim().toLowerCase()){ const dup=await repo.findTenantByName(name); if(dup && dup.id!==cur.id) return res.status(409).json({ error:{ code:'NOMBRE_EXISTE', message:'Ya existe una empresa con ese nombre' } }); }
   }
   if(b.logo && String(b.logo).length>900000) return res.status(400).json({ error:{ code:'LOGO_GRANDE', message:'El logo es muy pesado' } });
@@ -1026,6 +1026,27 @@ api.post('/tenants/:id/branches', authMw, superMw, h(async (req,res)=>{ const t=
 api.put('/tenants/:id/branches/:bid', authMw, superMw, h(async (req,res)=>{ const b=await repo.updateBranch(req.params.bid, Number(req.params.id), req.body||{}); if(!b) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Sucursal no encontrada' } }); logAction(req,'branch_update',{ entity:'branch', entity_id:Number(req.params.bid) }); res.json(b); }));
 api.delete('/tenants/:id/branches/:bid', authMw, superMw, h(async (req,res)=>{ try{ const ok=await repo.deleteBranch(req.params.bid, Number(req.params.id)); if(!ok) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Sucursal no encontrada' } }); logAction(req,'branch_delete',{ entity:'branch', entity_id:Number(req.params.bid) }); res.json({ deleted:true }); }catch(e){ res.status(409).json({ error:{ code:e.code||'ERROR', message:e.message||'No se pudo eliminar' } }); } }));
 api.get('/service-invoices', authMw, superMw, h(async (req,res)=>res.json(await repo.listServiceInvoices(null))));
+// Registrar pago: reactiva, acumula días del plan y genera recibo
+api.post('/tenants/:id/pay', authMw, superMw, h(async (req,res)=>{
+  const t=await repo.getTenant(req.params.id);
+  if(!t) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Empresa no encontrada' } });
+  const months=planMonths(t.plan_tipo);
+  if(!months) return res.status(400).json({ error:{ code:'SIN_TIPO', message:'Configura el tipo de plan antes de registrar el pago' } });
+  const today=new Date().toISOString().slice(0,10);
+  const vigente = t.vence && String(t.vence).slice(0,10) > today;  // ¿aún con días?
+  const base = vigente ? String(t.vence).slice(0,10) : today;      // acumular sobre vence o desde hoy
+  const newVence = addMonths(base, months);
+  const f={ status:'activo', vence:newVence };
+  if(!vigente) f.fecha_inicio=today;                                // periodo nuevo si estaba vencida/suspendida
+  const updated=await repo.updateTenant(t.id, f);
+  if(updated) updated.dias_restantes=diasRestantes(updated.vence);
+  const recibo=await repo.createServiceInvoice({ tenant_id:t.id, plan:t.plan_tipo, amount:t.plan_cost, due_date:newVence, status:'activo', email_to:t.email });
+  logAction(req,'service_payment',{ entity:'tenant', entity_id:t.id, detail:{ amount:t.plan_cost, periodo:t.plan_tipo, vence:newVence, reactivada:!vigente } });
+  if(t.email){ const body=['Recibo de pago '+recibo.numero,'Empresa: '+t.name,'Valor pagado: '+t.plan_cost,'Periodo: '+(t.plan_tipo||''),'Nueva fecha de vencimiento: '+newVence,'Pago confirmado.'].join('\n'); const r=await sendEmail(t.email, 'Recibo de pago '+recibo.numero+' - '+t.name, body); if(r.sent){ try{ await repo.markInvoiceSent(recibo.id); }catch(e){} } }
+  res.status(201).json({ tenant:updated, recibo });
+}));
+api.get('/pay-info', authMw, superMw, h(async (req,res)=>res.json({ bank:process.env.PAY_BANK||'', account:process.env.PAY_ACCOUNT||'', holder:process.env.PAY_HOLDER||'', info:process.env.PAY_INFO||'' })));
+api.post('/tenants/:id/bill/send', authMw, superMw, h(async (req,res)=>{ const t=await repo.getTenant(req.params.id); if(!t) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Empresa no encontrada' } }); if(!t.email) return res.status(400).json({ error:{ code:'SIN_CORREO', message:'La empresa no tiene correo registrado' } }); const body=['Factura de servicio - '+t.name,'Valor a pagar: '+(t.plan_cost||0),'','Datos para realizar el pago:','Banco / entidad: '+(process.env.PAY_BANK||'—'),'Número de cuenta: '+(process.env.PAY_ACCOUNT||'—'),'Titular: '+(process.env.PAY_HOLDER||'—'),(process.env.PAY_INFO||'')].join('\n'); const r=await sendEmail(t.email, 'Factura de servicio - '+t.name, body); logAction(req,'bill_send',{ entity:'tenant', entity_id:Number(req.params.id), detail:{ sent:!!r.sent } }); res.json({ sent:!!r.sent, reason:r.reason||null }); }));
 api.get('/users', authMw, superMw, h(async (req,res)=>res.json(await repo.listUsers())));
 api.post('/users', authMw, superMw, h(async (req,res)=>{
   const b=req.body||{};

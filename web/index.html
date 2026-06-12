@@ -1619,7 +1619,7 @@ function renderEmpresas(){
       +'<div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid var(--soft);padding-top:12px">'
       +'<div><div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;font-weight:700">Días de servicio</div>'
       +'<div style="font-size:22px;font-weight:800;color:'+e.color+'">'+(t.dias_restantes==null?'∞':(t.dias_restantes<0?'Vencido':t.dias_restantes))+'</div></div>'
-      +'<div style="text-align:right"><div style="font-size:11px;color:var(--faint)">'+(t.plan||'Sin plan')+'</div><div style="font-size:12px;color:var(--muted);font-weight:600">'+(t.users||0)+' usuarios</div></div>'
+      +'<div style="text-align:right"><div style="font-size:11px;color:var(--faint)">'+(t.plan_tipo?(t.plan_tipo[0].toUpperCase()+t.plan_tipo.slice(1)):'Sin plan')+'</div><div style="font-size:12px;color:var(--muted);font-weight:600">'+(t.users||0)+' usuarios</div></div>'
       +'</div></div>';
   }).join('')||'<div style="grid-column:1/-1;text-align:center;color:var(--faint);padding:40px">'+(topFilter?'Sin coincidencias':'Aún no hay empresas')+'</div>';
 }
@@ -1643,6 +1643,7 @@ async function verEmpresa(id){
     +(t.logo?'<img src="'+t.logo+'" style="width:54px;height:54px;border-radius:13px;object-fit:cover;border:1px solid var(--line)">':'<div style="width:54px;height:54px;border-radius:13px;background:var(--soft);display:grid;place-items:center;color:var(--faint);font-weight:800;font-size:22px">'+(t.name||'?')[0].toUpperCase()+'</div>')
     +'<div><h1>'+t.name+'</h1><p>'+(t.nit||'sin NIT')+' · <span class="pill '+e.cls+'">'+e.label+'</span></p></div></div>'
     +'<div class="h-actions" style="flex-wrap:wrap">'
+    +'<button class="btn dark" onclick="registrarPago('+id+')">💲 Registrar pago</button>'
     +'<button class="btn ghost" onclick="openTenantForm('+id+')">'+icon('gear')+' Editar</button>'
     +'<button class="btn ghost" onclick="toggleTenant('+id+',\''+t.status+'\',\''+(t.name||'').replace(/'/g,"\\'")+'\')">'+(t.status==='activo'?'⏸ Suspender':'▶ Activar')+'</button>'
     +'<button class="btn ghost" onclick="impersonar('+id+',\''+(t.name||'').replace(/'/g,"\\'")+'\')">👁️ Entrar</button>'
@@ -1655,7 +1656,7 @@ async function verEmpresa(id){
     +kpi('Usuarios','users',String(users.length),'asociados','up',.18)+'</div>'
     +'<div class="grid-2">'
     +sec('Información general', row('Nombre',_esc(t.name))+row('NIT',_esc(t.nit))+row('Contacto',_esc(t.contacto))+row('Correo',_esc(t.email))+row('Teléfono',_esc(t.telefono))+row('Creada',t.created_at?fmtDate(t.created_at):''))
-    +sec('Plan y vigencia', row('Plan contratado',_esc(t.plan))+row('Tipo de plan',t.plan_tipo?(t.plan_tipo[0].toUpperCase()+t.plan_tipo.slice(1)):'—')+row('Costo',fmt(t.plan_cost||0))+row('Fecha de inicio',t.fecha_inicio?fmtDate(t.fecha_inicio):'—')+row('Fecha de vencimiento',t.vence?fmtDate(t.vence):'—')+row('Días restantes',t.dias_restantes==null?'—':(t.dias_restantes<0?'Vencido':t.dias_restantes+' días'))+row('Estado',e.label), '<button class="btn dark" style="padding:6px 12px" onclick="openTenantForm('+id+')">Editar</button>')
+    +sec('Plan y vigencia', row('Tipo de plan',t.plan_tipo?(t.plan_tipo[0].toUpperCase()+t.plan_tipo.slice(1)):'—')+row('Costo',fmt(t.plan_cost||0))+row('Fecha de inicio',t.fecha_inicio?fmtDate(t.fecha_inicio):'—')+row('Fecha de vencimiento',t.vence?fmtDate(t.vence):'—')+row('Días restantes',t.dias_restantes==null?'—':(t.dias_restantes<0?'Vencido':t.dias_restantes+' días'))+row('Estado',e.label), '<button class="btn dark" style="padding:6px 12px" onclick="openTenantForm('+id+')">Editar</button>')
     +'</div>'
     +sec('Sedes', '<div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>Dirección</th><th>Teléfono</th><th>Estado</th><th></th></tr></thead><tbody>'
        +(_detBranches.map(function(b){ return '<tr><td><b>'+_esc(b.name)+'</b></td><td>'+(_esc(b.address)||'—')+'</td><td>'+(_esc(b.phone)||'—')+'</td><td><span class="pill '+(b.status==='activo'?'ok':'out')+'">'+b.status+'</span></td><td style="white-space:nowrap"><button onclick="openSedeForm('+id+','+b.id+')" style="'+actBtn+'">✎</button><button onclick="delSede('+id+','+b.id+')" style="'+actBtn+';color:var(--danger)">🗑</button></td></tr>'; }).join('')||'<tr><td colspan="5" style="color:var(--faint);padding:14px">Sin sedes</td></tr>')
@@ -1663,35 +1664,61 @@ async function verEmpresa(id){
     +sec('Usuarios asociados', '<div class="tbl-wrap"><table><thead><tr><th>Nombre</th><th>Usuario</th><th>Sede</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>'
        +(users.map(function(u){ return '<tr><td><b>'+_esc(u.name)+'</b></td><td class="mono" style="color:var(--muted)">@'+(_esc(u.username)||'—')+'</td><td>'+(u.branch_name?_esc(u.branch_name):'<span style="color:var(--faint)">toda</span>')+'</td><td><span class="pill ok">'+roleLabel(u.role)+'</span></td><td><span class="pill '+(u.status==='activo'?'ok':'out')+'">'+u.status+'</span></td><td style="white-space:nowrap"><button onclick="resetUserPw('+u.id+',\''+(u.username||'').replace(/'/g,"\\'")+'\')" style="'+actBtn+'">🔑</button><button onclick="openUserForm('+u.id+')" style="'+actBtn+'">✎</button><button onclick="toggleUser('+u.id+',\''+u.status+'\')" style="'+actBtn+'">'+(u.status==='activo'?'⏸':'▶')+'</button></td></tr>'; }).join('')||'<tr><td colspan="6" style="color:var(--faint);padding:14px">Sin usuarios</td></tr>')
        +'</tbody></table></div>', '<button class="btn dark" style="padding:6px 12px" onclick="openUserForm(null,'+id+')">'+icon('plus')+' Usuario</button>')
-    +sec('Facturas e historial de pagos', '<div class="tbl-wrap"><table><thead><tr><th>Factura</th><th>Plan</th><th>Valor</th><th>Pago</th><th>Vence</th><th>Estado</th><th>Correo</th><th></th></tr></thead><tbody>'
+    +sec('Historial de pagos', '<div class="tbl-wrap"><table><thead><tr><th>Recibo</th><th>Periodo</th><th>Valor</th><th>Fecha pago</th><th>Vence</th><th>Estado</th><th>Correo</th><th></th></tr></thead><tbody>'
        +(invoices.map(function(f){ return '<tr><td class="mono"><b>'+f.numero+'</b></td><td>'+(f.plan||'—')+'</td><td>'+fmt(f.amount)+'</td><td>'+fmtDate(f.issued_at)+'</td><td>'+(f.due_date?fmtDate(f.due_date):'—')+'</td><td><span class="pill '+(f.status==='activo'?'ok':'out')+'">'+f.status+'</span></td><td style="font-size:12px;color:var(--muted)">'+(f.sent?'✓ enviado':(f.email_to?'pendiente':'sin correo'))+'</td><td style="white-space:nowrap"><button title="Ver factura" onclick="verFactura('+f.id+')" style="'+actBtn+'">👁</button><button title="Eliminar" onclick="delFactura('+id+','+f.id+')" style="'+actBtn+';color:var(--danger)">🗑</button></td></tr>'; }).join('')||'<tr><td colspan="8" style="color:var(--faint);padding:14px">Sin facturas</td></tr>')
-       +'</tbody></table></div>', '<button class="btn dark" style="padding:6px 12px" onclick="generarFacturaDetalle('+id+')">'+icon('plus')+' Generar factura</button>')
+       +'</tbody></table></div>', '<button class="btn dark" style="padding:6px 12px" onclick="openFacturaModal()">'+icon('plus')+' Generar factura</button>')
     +'</div>';
 }
-async function generarFacturaDetalle(id){ try{ const inv=await API.post('/tenants/'+id+'/invoice',{}); toast('✓ Factura '+inv.numero+' generada'); await verEmpresa(id); openInvoiceModal(inv); }catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo')); } }
-function verFactura(invId){ const inv=(_detInvoices||[]).find(x=>x.id===invId); if(inv) openInvoiceModal(inv); }
 function _rowI(l,v){ return '<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--muted)">'+l+'</span><b style="text-align:right">'+v+'</b></div>'; }
-function openInvoiceModal(inv){
-  const t=_detTenant||{};
+function waSend(phone,text){ const p=String(phone||'').replace(/\D/g,''); window.open('https://wa.me/'+p+'?text='+encodeURIComponent(text),'_blank'); }
+function printArea(areaId,title){ const a=document.getElementById(areaId); if(!a) return; const w=window.open('','_blank','width=440,height=680'); if(!w){ toast('Permite ventanas emergentes para imprimir'); return; } w.document.write('<html><head><title>'+(title||'Documento')+'</title><style>body{font-family:system-ui,Arial;padding:18px;font-size:13px}b{font-weight:700}</style></head><body>'+a.innerHTML+'</body></html>'); w.document.close(); w.focus(); w.print(); }
+async function registrarPago(id){
+  if(!confirm('¿Registrar el pago del plan para esta empresa? Se reactivará el servicio y se sumará el periodo del plan.')) return;
+  try{ const r=await API.post('/tenants/'+id+'/pay',{}); toast('✓ Pago registrado · servicio actualizado'); await verEmpresa(id); openReciboModal(r.recibo, r.tenant); }
+  catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo registrar el pago')); }
+}
+function verFactura(invId){ const rc=(_detInvoices||[]).find(x=>x.id===invId); if(rc) openReciboModal(rc, _detTenant); }
+function waRecibo(invId){ const rc=(_detInvoices||[]).find(x=>x.id===invId)||{}; const t=_detTenant||{}; waSend(t.telefono, 'Recibo de pago '+rc.numero+'\nEmpresa: '+(t.name||'')+'\nValor pagado: '+fmt(rc.amount)+'\nPeriodo: '+(rc.plan||t.plan_tipo||'')+'\nNueva vigencia hasta: '+(rc.due_date?fmtDate(rc.due_date):'')+'\nPago confirmado.'); }
+function openReciboModal(rc, t){
+  t=t||_detTenant||{};
   const m=document.getElementById('modal');
-  m.innerHTML='<div style="background:#fff;border-radius:16px;max-width:430px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">'
-    +'<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center"><b style="font-family:var(--font-display);font-size:17px">Factura '+inv.numero+'</b><button onclick="closeModal()" style="font-size:24px;color:var(--faint);line-height:1">×</button></div>'
-    +'<div id="invArea" style="padding:20px 22px;font-size:13px">'
-    +'<div style="text-align:center;margin-bottom:14px"><b style="font-size:16px">'+_esc(t.name||'')+'</b><br><span style="color:var(--muted)">'+(_esc(t.nit)||'sin NIT')+(t.email?' · '+_esc(t.email):'')+'</span><br><span style="color:var(--faint)">Factura de servicio · '+inv.numero+'</span></div>'
+  m.innerHTML='<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center"><b style="font-family:var(--font-display);font-size:17px">Recibo de pago</b><button onclick="closeModal()" style="font-size:24px;color:var(--faint);line-height:1">×</button></div>'
+    +'<div id="recArea" style="padding:20px 22px;font-size:13px">'
+    +'<div style="text-align:center;margin-bottom:14px"><b style="font-size:16px">'+_esc(t.name||'')+'</b><br><span style="color:var(--faint)">RECIBO DE PAGO · '+rc.numero+'</span></div>'
     +'<div style="display:grid;gap:8px;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);padding:14px 0">'
-    +_rowI('Plan contratado',(inv.plan||'—')+(t.plan_tipo?' ('+t.plan_tipo+')':''))
-    +_rowI('Valor del servicio',fmt(inv.amount))
-    +_rowI('Fecha de inicio',t.fecha_inicio?fmtDate(t.fecha_inicio):'—')
-    +_rowI('Fecha de vencimiento',inv.due_date?fmtDate(inv.due_date):'—')
-    +_rowI('Fecha de pago',fmtDate(inv.issued_at))
-    +_rowI('Estado del pago','<span class="pill '+(inv.status==='activo'?'ok':'out')+'">'+inv.status+'</span>')
-    +'</div><p style="text-align:center;color:var(--faint);margin-top:12px">Gracias por su pago</p></div>'
-    +'<div style="padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" onclick="enviarFactura('+inv.tenant_id+','+inv.id+')">✉ Enviar por correo</button><button class="btn ghost" onclick="printInvoice()">🖨 Imprimir</button><button class="btn dark" onclick="closeModal()">Cerrar</button></div></div>';
+    +_rowI('Fecha de pago',fmtDate(rc.issued_at))
+    +_rowI('Valor pagado',fmt(rc.amount))
+    +_rowI('Periodo del servicio',(rc.plan||t.plan_tipo||'—'))
+    +_rowI('Nueva fecha de vencimiento',rc.due_date?fmtDate(rc.due_date):'—')
+    +'</div><p style="text-align:center;color:var(--emerald);font-weight:700;margin-top:12px">✓ Pago confirmado</p></div>'
+    +'<div style="padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" onclick="enviarFactura('+rc.tenant_id+','+rc.id+')">✉ Correo</button><button class="btn ghost" onclick="waRecibo('+rc.id+')">🟢 WhatsApp</button><button class="btn ghost" onclick="printArea(\'recArea\',\'Recibo\')">🖨 Imprimir</button><button class="btn dark" onclick="closeModal()">Cerrar</button></div></div>';
   m.style.display='flex';
 }
-function printInvoice(){ const a=document.getElementById('invArea'); if(!a) return; const w=window.open('','_blank','width=420,height=640'); if(!w){ toast('Permite ventanas emergentes para imprimir'); return; } w.document.write('<html><head><title>Factura</title><style>body{font-family:system-ui,Arial;padding:18px;font-size:13px}b{font-weight:700}</style></head><body>'+a.innerHTML+'</body></html>'); w.document.close(); w.focus(); w.print(); }
-async function enviarFactura(tid,invId){ try{ const r=await API.post('/tenants/'+tid+'/invoices/'+invId+'/send',{}); toast(r.sent?'✓ Factura enviada al correo':'No se envió: '+(r.reason||'configura SMTP')); }catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo enviar')); } }
-function delFactura(tid,invId){ if(!confirm('¿Eliminar esta factura? Esta acción no se puede deshacer.')) return; API.del('/tenants/'+tid+'/invoices/'+invId).then(function(){ toast('✓ Factura eliminada'); verEmpresa(tid); }).catch(function(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo eliminar')); }); }
+async function openFacturaModal(){
+  const t=_detTenant||{};
+  let pi={}; try{ pi=await API.get('/pay-info'); }catch(e){}
+  const m=document.getElementById('modal');
+  m.innerHTML='<div style="background:#fff;border-radius:16px;max-width:430px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center"><b style="font-family:var(--font-display);font-size:17px">Factura de servicio</b><button onclick="closeModal()" style="font-size:24px;color:var(--faint);line-height:1">×</button></div>'
+    +'<div id="facArea" style="padding:20px 22px;font-size:13px">'
+    +'<div style="text-align:center;margin-bottom:14px"><b style="font-size:16px">'+_esc(t.name||'')+'</b><br><span style="color:var(--muted)">'+(_esc(t.nit)||'sin NIT')+(t.email?' · '+_esc(t.email):'')+'</span></div>'
+    +'<div style="display:grid;gap:8px;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);padding:14px 0">'
+    +_rowI('Valor a pagar',fmt(t.plan_cost||0))
+    +'</div>'
+    +'<div style="margin-top:14px"><b style="display:block;margin-bottom:8px">Información de pago</b>'
+    +_rowI('Banco / entidad',_esc(pi.bank)||'—')
+    +_rowI('Número de cuenta',_esc(pi.account)||'—')
+    +_rowI('Titular',_esc(pi.holder)||'—')
+    +(pi.info?'<p style="color:var(--muted);margin-top:10px">'+_esc(pi.info)+'</p>':'')
+    +'</div></div>'
+    +'<div style="padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" onclick="enviarFacturaBill('+t.id+')">✉ Correo</button><button class="btn ghost" onclick="waFactura()">🟢 WhatsApp</button><button class="btn ghost" onclick="printArea(\'facArea\',\'Factura\')">🖨 Imprimir</button><button class="btn dark" onclick="closeModal()">Cerrar</button></div></div>';
+  m.style.display='flex';
+}
+async function enviarFacturaBill(tid){ try{ const r=await API.post('/tenants/'+tid+'/bill/send',{}); toast(r.sent?'✓ Factura enviada al correo':'No se envió: '+(r.reason||'configura SMTP')); }catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo enviar')); } }
+async function waFactura(){ const t=_detTenant||{}; let pi={}; try{ pi=await API.get('/pay-info'); }catch(e){} waSend(t.telefono, 'Factura de servicio - '+(t.name||'')+'\nValor a pagar: '+fmt(t.plan_cost||0)+'\n\nDatos para el pago:\nBanco: '+(pi.bank||'—')+'\nCuenta: '+(pi.account||'—')+'\nTitular: '+(pi.holder||'—')+(pi.info?'\n'+pi.info:'')); }
+async function enviarFactura(tid,invId){ try{ const r=await API.post('/tenants/'+tid+'/invoices/'+invId+'/send',{}); toast(r.sent?'✓ Enviado al correo':'No se envió: '+(r.reason||'configura SMTP')); }catch(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo enviar')); } }
+function delFactura(tid,invId){ if(!confirm('¿Eliminar este registro de pago? Esta acción no se puede deshacer.')) return; API.del('/tenants/'+tid+'/invoices/'+invId).then(function(){ toast('✓ Registro eliminado'); verEmpresa(tid); }).catch(function(e){ toast('Error: '+((e.error&&e.error.message)||'no se pudo eliminar')); }); }
 function openSedeForm(tid,bid){
   const b=bid?((_detBranches||[]).find(x=>x.id===bid)||{}):{};
   const m=document.getElementById('modal');
@@ -1732,12 +1759,11 @@ function openTenantForm(id){
     +ffield('t_email','Correo',t.email||'','email')
     +ffield('t_tel','# Contacto (teléfono)',t.telefono||'')
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    +'<div><label style="'+flbl+'">Plan contratado</label><select id="f_t_plan" style="'+finp+';background:#fff">'+['','Básico','Estándar','Premium','Personalizado'].map(p=>'<option value="'+p+'" '+((t.plan||'')===p?'selected':'')+'>'+(p||'— Selecciona —')+'</option>').join('')+'</select></div>'
+    +'<div><label style="'+flbl+'">Tipo de plan</label><select id="f_t_tipo" onchange="calcVence()" style="'+finp+';background:#fff">'+[['','— Selecciona —'],['mensual','Mensual'],['trimestral','Trimestral'],['semestral','Semestral'],['anual','Anual']].map(o=>'<option value="'+o[0]+'" '+((t.plan_tipo||'')===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'
     +'<div><label style="'+flbl+'">Costo del plan (COP)</label><input id="f_t_cost" type="number" min="0" value="'+(t.plan_cost||0)+'" style="'+finp+'"></div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    +'<div><label style="'+flbl+'">Tipo de plan</label><select id="f_t_tipo" onchange="calcVence()" style="'+finp+';background:#fff">'+[['','— Selecciona —'],['mensual','Mensual'],['trimestral','Trimestral'],['semestral','Semestral'],['anual','Anual']].map(o=>'<option value="'+o[0]+'" '+((t.plan_tipo||'')===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+'</select></div>'
-    +'<div><label style="'+flbl+'">Fecha de inicio</label><input id="f_t_inicio" type="date" value="'+(t.fecha_inicio||'')+'" onchange="calcVence()" style="'+finp+'"></div></div>'
-    +'<div><label style="'+flbl+'">Vencimiento (calculado automáticamente)</label><input id="f_t_vence_pv" type="text" readonly value="'+(t.vence?fmtDate(t.vence):'')+'" style="'+finp+';background:var(--soft);color:var(--muted)"></div>'
+    +'<div><label style="'+flbl+'">Fecha de inicio</label><input id="f_t_inicio" type="date" value="'+(t.fecha_inicio||'')+'" onchange="calcVence()" style="'+finp+'"></div>'
+    +'<div><label style="'+flbl+'">Vencimiento (automático)</label><input id="f_t_vence_pv" type="text" readonly value="'+(t.vence?fmtDate(t.vence):'')+'" style="'+finp+';background:var(--soft);color:var(--muted)"></div></div>'
     +'<div><label style="'+flbl+'">Logo</label><input type="file" accept="image/*" onchange="onLogoPick(this)" style="font-size:13px"><img id="t_logo_pv" src="'+(t.logo||'')+'" style="'+(t.logo?'':'display:none;')+'width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--line);margin-top:10px"></div>'
     +(edit?'<div style="border-top:1px solid var(--line);padding-top:14px"><label style="'+flbl+'">Tu contraseña (para guardar) *</label><input id="f_t_pw" type="password" style="'+finp+'"></div>':'')
     +'<div id="t_err" style="color:var(--danger);font-size:13px;min-height:16px"></div></div>'
@@ -1747,7 +1773,7 @@ function openTenantForm(id){
 async function saveTenant(id){
   const edit=id!=null, err=document.getElementById('t_err');
   const name=document.getElementById('f_t_name').value.trim();
-  const payload={ name, nit:document.getElementById('f_t_nit').value.trim(), contacto:document.getElementById('f_t_contacto').value.trim(), email:document.getElementById('f_t_email').value.trim(), telefono:document.getElementById('f_t_tel').value.trim(), plan_tipo:document.getElementById('f_t_tipo').value||null, fecha_inicio:document.getElementById('f_t_inicio').value||null, plan:document.getElementById('f_t_plan').value||null, plan_cost:Number(document.getElementById('f_t_cost').value)||0 };
+  const payload={ name, nit:document.getElementById('f_t_nit').value.trim(), contacto:document.getElementById('f_t_contacto').value.trim(), email:document.getElementById('f_t_email').value.trim(), telefono:document.getElementById('f_t_tel').value.trim(), plan_tipo:document.getElementById('f_t_tipo').value||null, fecha_inicio:document.getElementById('f_t_inicio').value||null, plan_cost:Number(document.getElementById('f_t_cost').value)||0 };
   if(!name){ err.textContent='El nombre es obligatorio'; return; }
   if(name.toLowerCase()==='nexo'){ err.textContent='El nombre "Nexo" está reservado'; return; }
   if(_logoData) payload.logo=_logoData;
