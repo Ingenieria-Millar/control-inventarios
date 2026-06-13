@@ -115,6 +115,8 @@ function loadJson(){
   data.counters.branch=Math.max(data.counters.branch,mx(data.branches));
   data.counters.cashsession=Math.max(data.counters.cashsession,mx(data.cashSessions));
   data.counters.sinvoice=Math.max(data.counters.sinvoice,mx(data.serviceInvoices));
+  // Normaliza el perfil principal: "Súper Admin" -> "Soporte"
+  data.users.forEach(u=>{ if(u.role==='superadmin' && (u.name==='Súper Admin'||u.username==='Súper Admin')){ u.name='Soporte'; u.username='Soporte'; } });
   reconcileBranches();
 }
 // ----- Helpers de sucursales (modo JSON) -----
@@ -131,12 +133,12 @@ const jsonRepo = {
   async logAudit(e){ const row={ id:nextId('audit'), ts:new Date().toISOString(), actor_user_id:e.actor_user_id==null?null:Number(e.actor_user_id), actor_name:e.actor_name||null, actor_role:e.actor_role||null, tenant_id:e.tenant_id==null?null:Number(e.tenant_id), action:e.action, entity:e.entity||null, entity_id:e.entity_id==null?null:Number(e.entity_id), detail:e.detail||null, ip:e.ip||null }; data.audit.push(row); saveJson(); return row; },
   async listAudit({ tenant_id=null, limit=200 }={}){ let rows=data.audit; if(tenant_id!=null) rows=rows.filter(r=>r.tenant_id===Number(tenant_id)); return rows.slice().sort((a,b)=>b.id-a.id).slice(0, Math.max(1,Number(limit)||200)); },
   // Tenants
-  async createTenant(o){ const t={ id:nextId('tenant'), name:o.name, code:(o.code||'').toUpperCase()||null, nit:o.nit||'', email:o.email||null, contacto:o.contacto||null, telefono:o.telefono||null, vence:o.vence||null, fecha_inicio:o.fecha_inicio||null, plan:o.plan||null, plan_tipo:o.plan_tipo||null, plan_cost:Number(o.plan_cost)||0, logo:o.logo||null, status:'activo', created_at:new Date().toISOString() }; data.tenants.push(t); data.branches.push({ id:nextId('branch'), tenant_id:t.id, name:'Principal', address:'', phone:'', status:'activo', created_at:new Date().toISOString() }); saveJson(); return t; },
+  async createTenant(o){ const t={ id:nextId('tenant'), name:o.name, code:(o.code||'').toUpperCase()||null, nit:o.nit||'', email:o.email||null, contacto:o.contacto||null, telefono:o.telefono||null, vence:o.vence||null, fecha_inicio:o.fecha_inicio||null, fecha_creacion:o.fecha_creacion||null, plan:o.plan||null, plan_tipo:o.plan_tipo||null, plan_cost:Number(o.plan_cost)||0, logo:o.logo||null, status:'activo', created_at:new Date().toISOString() }; data.tenants.push(t); data.branches.push({ id:nextId('branch'), tenant_id:t.id, name:'Principal', address:'', phone:'', status:'activo', created_at:new Date().toISOString() }); saveJson(); return t; },
   async getTenant(id){ return data.tenants.find(t=>t.id===Number(id)) || null; },
   async findTenantByCode(code){ const c=String(code||'').toUpperCase(); return data.tenants.find(t=>(t.code||'').toUpperCase()===c) || null; },
   async findTenantByName(name){ const n=String(name||'').trim().toLowerCase(); return data.tenants.find(t=>(t.name||'').trim().toLowerCase()===n) || null; },
   async listTenants(){ const today=new Date().toISOString().slice(0,10); let changed=false; data.tenants.forEach(t=>{ if(t.vence && today>String(t.vence).slice(0,10) && t.status==='activo'){ t.status='inactivo'; changed=true; } }); if(changed) saveJson(); return data.tenants.map(t=>({ ...t, plan_cost:Number(t.plan_cost)||0, dias_restantes:diasRestantes(t.vence), users:data.users.filter(u=>u.tenant_id===t.id).length, products:data.products.filter(p=>p.tenant_id===t.id).length })); },
-  async updateTenant(id,f){ const t=data.tenants.find(x=>x.id===Number(id)); if(!t) return null; if(f.status) t.status=f.status; if(f.name) t.name=f.name; if(f.nit!==undefined) t.nit=f.nit; if(f.email!==undefined) t.email=f.email; if(f.contacto!==undefined) t.contacto=f.contacto; if(f.telefono!==undefined) t.telefono=f.telefono; if(f.vence!==undefined) t.vence=f.vence||null; if(f.fecha_inicio!==undefined) t.fecha_inicio=f.fecha_inicio||null; if(f.plan!==undefined) t.plan=f.plan; if(f.plan_tipo!==undefined) t.plan_tipo=f.plan_tipo; if(f.plan_cost!==undefined) t.plan_cost=Number(f.plan_cost)||0; if(f.logo!==undefined) t.logo=f.logo; if(f.code!==undefined) t.code=(f.code||'').toUpperCase()||null; saveJson(); return t; },
+  async updateTenant(id,f){ const t=data.tenants.find(x=>x.id===Number(id)); if(!t) return null; if(f.status) t.status=f.status; if(f.name) t.name=f.name; if(f.nit!==undefined) t.nit=f.nit; if(f.email!==undefined) t.email=f.email; if(f.contacto!==undefined) t.contacto=f.contacto; if(f.telefono!==undefined) t.telefono=f.telefono; if(f.vence!==undefined) t.vence=f.vence||null; if(f.fecha_inicio!==undefined) t.fecha_inicio=f.fecha_inicio||null; if(f.fecha_creacion!==undefined) t.fecha_creacion=f.fecha_creacion||null; if(f.plan!==undefined) t.plan=f.plan; if(f.plan_tipo!==undefined) t.plan_tipo=f.plan_tipo; if(f.plan_cost!==undefined) t.plan_cost=Number(f.plan_cost)||0; if(f.logo!==undefined) t.logo=f.logo; if(f.code!==undefined) t.code=(f.code||'').toUpperCase()||null; saveJson(); return t; },
   async deleteTenant(id){ const tid=Number(id); const t=data.tenants.find(x=>x.id===tid); if(!t) return false; const uids=data.users.filter(u=>u.tenant_id===tid).map(u=>u.id); data.sessions=data.sessions.filter(s=>!uids.includes(s.user_id)); data.users=data.users.filter(u=>u.tenant_id!==tid); data.products=data.products.filter(p=>p.tenant_id!==tid); data.sales=data.sales.filter(s=>s.tenant_id!==tid); data.movements=data.movements.filter(m=>m.tenant_id!==tid); data.purchases=data.purchases.filter(p=>p.tenant_id!==tid); data.expenses=data.expenses.filter(e=>e.tenant_id!==tid); data.tenants=data.tenants.filter(x=>x.id!==tid); saveJson(); return true; },
   // Users
   async createUser(o){ const u={ id:nextId('user'), tenant_id:o.tenant_id==null?null:Number(o.tenant_id), branch_id:o.branch_id==null||o.branch_id===''?null:Number(o.branch_id), name:o.name, username:o.username||null, email:o.email||null, role:o.role||'tienda', password_hash:o.password_hash, password_salt:o.password_salt, status:o.status||'activo', last_login:null, created_at:new Date().toISOString() }; data.users.push(u); saveJson(); return u; },
@@ -238,10 +240,10 @@ const jsonRepo = {
   async createUnit(tid,productId,imei,note){ const im=String(imei||'').trim(); if(!im) throw { code:'VALIDACION', message:'IMEI/serial obligatorio' }; if(data.units.find(u=>u.tenant_id===tid && String(u.imei).trim().toLowerCase()===im.toLowerCase())) throw { code:'IMEI_EXISTE', message:'Ese IMEI/serial ya está registrado' }; const u={ id:nextId('unit'), tenant_id:tid, product_id:Number(productId), imei:im, status:'disponible', sale_id:null, note:note||'', created_at:new Date().toISOString(), updated_at:new Date().toISOString() }; data.units.push(u); saveJson(); return u; },
   async bajaUnit(id,tid){ const u=data.units.find(x=>x.id===Number(id)&&x.tenant_id===tid); if(!u) return null; if(u.status==='vendido') throw { code:'UNIDAD_VENDIDA', message:'No puedes dar de baja una unidad vendida' }; u.status='baja'; u.updated_at=new Date().toISOString(); saveJson(); return u; },
   // Sucursales / stock por sucursal
-  async listBranches(tid){ return data.branches.filter(b=>b.tenant_id===tid).sort((a,b)=>a.id-b.id); },
+  async listBranches(tid){ const today=new Date().toISOString().slice(0,10); let ch=false; data.branches.forEach(b=>{ if(b.tenant_id===tid && b.vence && today>String(b.vence).slice(0,10) && b.status==='activo'){ b.status='suspendida'; ch=true; } }); if(ch) saveJson(); return data.branches.filter(b=>b.tenant_id===tid).sort((a,b)=>a.id-b.id).map(b=>({ ...b, plan_cost:Number(b.plan_cost)||0, dias_restantes:diasRestantes(b.vence) })); },
   async getBranch(id,tid){ return data.branches.find(b=>b.id===Number(id)&&b.tenant_id===tid)||null; },
-  async createBranch(input,tid){ const b={ id:nextId('branch'), tenant_id:tid, name:String(input.name).trim(), address:input.address||'', phone:input.phone||'', status:'activo', created_at:new Date().toISOString() }; data.branches.push(b); saveJson(); return b; },
-  async updateBranch(id,tid,input){ const b=data.branches.find(x=>x.id===Number(id)&&x.tenant_id===tid); if(!b) return null; ['name','address','phone','status'].forEach(f=>{ if(input[f]!==undefined) b[f]=input[f]; }); saveJson(); return b; },
+  async createBranch(input,tid){ const tipo=input.plan_tipo||null; const ini=input.fecha_inicio||null; const vence=(planMonths(tipo)&&ini)?addMonths(ini,planMonths(tipo)):(input.vence||null); const b={ id:nextId('branch'), tenant_id:tid, name:String(input.name).trim(), address:input.address||'', phone:input.phone||'', status:'activo', fecha_inicio:ini, plan_tipo:tipo, plan_cost:Number(input.plan_cost)||0, vence, created_at:new Date().toISOString() }; data.branches.push(b); saveJson(); return { ...b, dias_restantes:diasRestantes(b.vence) }; },
+  async updateBranch(id,tid,input){ const b=data.branches.find(x=>x.id===Number(id)&&x.tenant_id===tid); if(!b) return null; ['name','address','phone','status'].forEach(f=>{ if(input[f]!==undefined) b[f]=input[f]; }); if(input.fecha_inicio!==undefined) b.fecha_inicio=input.fecha_inicio||null; if(input.plan_tipo!==undefined) b.plan_tipo=input.plan_tipo||null; if(input.plan_cost!==undefined) b.plan_cost=Number(input.plan_cost)||0; if(input.vence!==undefined) b.vence=input.vence||null; const m=planMonths(b.plan_tipo); if(m && b.fecha_inicio && input.vence===undefined && (input.plan_tipo!==undefined||input.fecha_inicio!==undefined)) b.vence=addMonths(b.fecha_inicio,m); saveJson(); return { ...b, dias_restantes:diasRestantes(b.vence) }; },
   async deleteBranch(id,tid){ const bid=Number(id); if(!data.branches.find(b=>b.id===bid&&b.tenant_id===tid)) return false; const others=data.branches.filter(b=>b.tenant_id===tid && b.id!==bid); if(!others.length) throw { code:'ULTIMA_SUCURSAL', message:'No puedes eliminar la única sucursal' }; if(data.branchStock.some(s=>s.branch_id===bid && s.qty>0)) throw { code:'SUCURSAL_CON_STOCK', message:'La sucursal tiene stock; trasládalo o ajústalo antes de eliminar' }; data.branches=data.branches.filter(b=>b.id!==bid); data.branchStock=data.branchStock.filter(s=>s.branch_id!==bid); saveJson(); return true; },
   async defaultBranchId(tid){ return jsonDefaultBranchId(tid); },
   async productStock(tid,productId){ const pid=Number(productId); return data.branchStock.filter(s=>s.tenant_id===tid && s.product_id===pid).map(s=>({ branch_id:s.branch_id, branch_name:(data.branches.find(b=>b.id===s.branch_id)||{}).name||null, qty:s.qty })); },
@@ -253,11 +255,15 @@ const jsonRepo = {
   async closeCashSession(id,tid,counted,notes){ const s=data.cashSessions.find(x=>x.id===Number(id)&&x.tenant_id===tid); if(!s) return null; if(s.status!=='abierta') throw { code:'CAJA_CERRADA', message:'La caja ya está cerrada' }; const cashIn=data.sales.filter(v=>v.cash_session_id===s.id && v.pay_method==='efectivo' && v.pay_status!=='credito').reduce((a,v)=>a+v.total,0); const cashOut=data.returns.filter(r=>r.cash_session_id===s.id && r.sale_pay_status!=='credito').reduce((a,r)=>a+r.total,0); const expected=Number(s.opening_amount)+cashIn-cashOut; s.counted_amount=Number(counted)||0; s.expected_amount=expected; s.difference=s.counted_amount-expected; s.closed_at=new Date().toISOString(); s.status='cerrada'; if(notes!==undefined) s.notes=notes||''; saveJson(); return s; },
   async cashSessionSummary(s){ const cashIn=data.sales.filter(v=>v.cash_session_id===s.id && v.pay_method==='efectivo' && v.pay_status!=='credito').reduce((a,v)=>a+v.total,0); const ventas=data.sales.filter(v=>v.cash_session_id===s.id).length; const cashOut=data.returns.filter(r=>r.cash_session_id===s.id && r.sale_pay_status!=='credito').reduce((a,r)=>a+r.total,0); return { cashIn, cashOut, ventas, expected:Number(s.opening_amount)+cashIn-cashOut }; },
   // Facturas de servicio (suscripción)
-  async createServiceInvoice(o){ const id=nextId('sinvoice'); const inv={ id, tenant_id:Number(o.tenant_id), numero:'SVC-'+String(id).padStart(5,'0'), plan:o.plan||null, amount:Number(o.amount)||0, issued_at:new Date().toISOString(), due_date:o.due_date||null, status:o.status||'activo', email_to:o.email_to||null, sent:o.sent?1:0, created_at:new Date().toISOString() }; data.serviceInvoices.push(inv); saveJson(); return { ...inv, sent:!!inv.sent }; },
+  async createServiceInvoice(o){ const id=nextId('sinvoice'); const inv={ id, tenant_id:Number(o.tenant_id), branch_id:o.branch_id!=null?Number(o.branch_id):null, numero:'SVC-'+String(id).padStart(5,'0'), plan:o.plan||null, periodo:o.periodo||o.plan||null, amount:Number(o.amount)||0, issued_at: o.issued_at!==undefined ? o.issued_at : new Date().toISOString(), due_date:o.due_date||null, status:o.status||'pendiente', email_to:o.email_to||null, sent:o.sent?1:0, created_at:new Date().toISOString() }; data.serviceInvoices.push(inv); saveJson(); return { ...inv, sent:!!inv.sent }; },
   async listServiceInvoices(tid){ let rows=data.serviceInvoices; if(tid!=null) rows=rows.filter(x=>x.tenant_id===Number(tid)); return rows.slice().sort((a,b)=>b.id-a.id).map(x=>({ ...x, sent:!!x.sent })); },
   async markInvoiceSent(id){ const x=data.serviceInvoices.find(s=>s.id===Number(id)); if(x){ x.sent=1; saveJson(); } },
   async getServiceInvoice(id){ const x=data.serviceInvoices.find(s=>s.id===Number(id)); return x?{ ...x, sent:!!x.sent }:null; },
   async deleteServiceInvoice(id){ const i=data.serviceInvoices.findIndex(s=>s.id===Number(id)); if(i<0) return false; data.serviceInvoices.splice(i,1); saveJson(); return true; },
+  async listPendingInvoices(){ return data.serviceInvoices.filter(x=>x.status==='pendiente').sort((a,b)=>b.id-a.id).map(x=>({ ...x, sent:!!x.sent, tenant_name:(data.tenants.find(t=>t.id===x.tenant_id)||{}).name||null, branch_name:(data.branches.find(b=>b.id===x.branch_id)||{}).name||null })); },
+  async branchesForBilling(){ return data.branches.filter(b=>b.plan_tipo && b.vence).map(b=>({ id:b.id, tenant_id:b.tenant_id, plan_tipo:b.plan_tipo, plan_cost:Number(b.plan_cost)||0, vence:String(b.vence).slice(0,10), status:b.status, dias_restantes:diasRestantes(b.vence) })); },
+  async pendingInvoiceFor(branchId,dueDate){ return data.serviceInvoices.find(x=>x.branch_id===Number(branchId) && x.status==='pendiente' && String(x.due_date).slice(0,10)===String(dueDate).slice(0,10))||null; },
+  async markInvoicePaid(id){ const x=data.serviceInvoices.find(s=>s.id===Number(id)); if(!x) return null; x.status='pagada'; x.issued_at=new Date().toISOString(); saveJson(); return { ...x, sent:!!x.sent }; },
   async createReturn(input,tid,userId){
     const sale=data.sales.find(s=>s.id===Number(input.sale_id)&&s.tenant_id===tid);
     if(!sale) throw { code:'VENTA_NO_EXISTE', message:'La venta no existe' };
@@ -332,7 +338,14 @@ const MIGRATIONS = [
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_cost NUMERIC DEFAULT 0`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id INTEGER`,
   `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_tipo TEXT`,
-  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS fecha_inicio DATE`
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS fecha_inicio DATE`,
+  `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS fecha_creacion DATE`,
+  `ALTER TABLE branches ADD COLUMN IF NOT EXISTS fecha_inicio DATE`,
+  `ALTER TABLE branches ADD COLUMN IF NOT EXISTS plan_tipo TEXT`,
+  `ALTER TABLE branches ADD COLUMN IF NOT EXISTS plan_cost NUMERIC DEFAULT 0`,
+  `ALTER TABLE branches ADD COLUMN IF NOT EXISTS vence DATE`,
+  `ALTER TABLE service_invoices ADD COLUMN IF NOT EXISTS branch_id INTEGER`,
+  `ALTER TABLE service_invoices ADD COLUMN IF NOT EXISTS periodo TEXT`
 ];
 // Índices y restricciones (se aplican con try/catch: los UNIQUE pueden fallar sobre datos sucios preexistentes)
 const INDEXES = [
@@ -364,19 +377,19 @@ const INDEXES = [
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_name ON tenants(lower(btrim(name)))`
 ];
 const iso = v => (v instanceof Date ? v.toISOString() : v);
-function mapTenant(r){ return { id:r.id, name:r.name, code:r.code||null, nit:r.nit, email:r.email||null, contacto:r.contacto||null, telefono:r.telefono||null, vence: r.vence? (r.vence instanceof Date? r.vence.toISOString().slice(0,10) : String(r.vence).slice(0,10)) : null, fecha_inicio: r.fecha_inicio? (r.fecha_inicio instanceof Date? r.fecha_inicio.toISOString().slice(0,10) : String(r.fecha_inicio).slice(0,10)) : null, plan:r.plan||null, plan_tipo:r.plan_tipo||null, plan_cost:Number(r.plan_cost)||0, logo:r.logo||null, status:r.status, dias_restantes:diasRestantes(r.vence), created_at:iso(r.created_at) }; }
+function mapTenant(r){ return { id:r.id, name:r.name, code:r.code||null, nit:r.nit, email:r.email||null, contacto:r.contacto||null, telefono:r.telefono||null, vence: r.vence? (r.vence instanceof Date? r.vence.toISOString().slice(0,10) : String(r.vence).slice(0,10)) : null, fecha_inicio: r.fecha_inicio? (r.fecha_inicio instanceof Date? r.fecha_inicio.toISOString().slice(0,10) : String(r.fecha_inicio).slice(0,10)) : null, fecha_creacion: r.fecha_creacion? (r.fecha_creacion instanceof Date? r.fecha_creacion.toISOString().slice(0,10) : String(r.fecha_creacion).slice(0,10)) : null, plan:r.plan||null, plan_tipo:r.plan_tipo||null, plan_cost:Number(r.plan_cost)||0, logo:r.logo||null, status:r.status, dias_restantes:diasRestantes(r.vence), created_at:iso(r.created_at) }; }
 function diasRestantes(vence){ if(!vence) return null; const d=String(vence instanceof Date?vence.toISOString():vence).slice(0,10); const v=new Date(d+'T00:00:00'); const t=new Date(); t.setHours(0,0,0,0); return Math.round((v-t)/86400000); }
 function planMonths(tipo){ return ({ mensual:1, trimestral:3, semestral:6, anual:12 })[String(tipo||'').toLowerCase()] || 0; }
 function addMonths(dateStr, months){ const d=new Date(String(dateStr).slice(0,10)+'T00:00:00'); if(isNaN(d.getTime())) return null; const day=d.getDate(); d.setMonth(d.getMonth()+months); if(d.getDate()<day) d.setDate(0); return d.toISOString().slice(0,10); }
 // Calcula la fecha de vencimiento a partir de fecha_inicio + tipo de plan (meses calendario)
 function computeVence(b){ const m=planMonths(b&&b.plan_tipo); if(m>0 && b && b.fecha_inicio) return addMonths(b.fecha_inicio, m); return undefined; }
-function mapServiceInvoice(r){ return { id:r.id, tenant_id:r.tenant_id, numero:r.numero, plan:r.plan||null, amount:Number(r.amount)||0, issued_at:iso(r.issued_at), due_date: r.due_date? (r.due_date instanceof Date? r.due_date.toISOString().slice(0,10): String(r.due_date).slice(0,10)) : null, status:r.status||'activo', email_to:r.email_to||null, sent:!!r.sent, created_at:iso(r.created_at) }; }
+function mapServiceInvoice(r){ return { id:r.id, tenant_id:r.tenant_id, branch_id:r.branch_id!=null?Number(r.branch_id):null, numero:r.numero, plan:r.plan||null, periodo:r.periodo||r.plan||null, amount:Number(r.amount)||0, issued_at:r.issued_at?iso(r.issued_at):null, due_date: r.due_date? (r.due_date instanceof Date? r.due_date.toISOString().slice(0,10): String(r.due_date).slice(0,10)) : null, status:r.status||'pendiente', email_to:r.email_to||null, sent:!!r.sent, created_at:iso(r.created_at) }; }
 function mapProduct(r){ return { id:r.id, tenant_id:r.tenant_id, sku:r.sku, barcode:r.barcode, name:r.name, brand:r.brand, category:r.category, type:r.type, emoji:r.emoji, price:Number(r.price), cost:Number(r.cost), stock:Number(r.stock), stock_min:Number(r.stock_min), device:Number(r.device), compat: Array.isArray(r.compat)?r.compat:(r.compat||[]), created_at:iso(r.created_at), updated_at:iso(r.updated_at) }; }
 function mapSale(r){ return { id:r.id, tenant_id:r.tenant_id, user_id:r.user_id, numero:r.numero, fecha:iso(r.fecha), subtotal:Number(r.subtotal), iva:Number(r.iva), total:Number(r.total), pay_method:r.pay_method, customer:r.customer, customer_id: r.customer_id!=null?Number(r.customer_id):null, branch_id: r.branch_id!=null?Number(r.branch_id):null, cash_session_id: r.cash_session_id!=null?Number(r.cash_session_id):null, pay_status:r.pay_status||'pagada', items: r.items||[], created_at:iso(r.created_at) }; }
 function mapPurchase(r){ return { id:r.id, tenant_id:r.tenant_id, user_id:r.user_id, numero:r.numero, fecha:iso(r.fecha), proveedor:r.proveedor, total:Number(r.total), pay_status:r.pay_status||'pagada', branch_id: r.branch_id!=null?Number(r.branch_id):null, items: r.items||[], created_at:iso(r.created_at) }; }
 function mapExpense(r){ return { id:r.id, tenant_id:r.tenant_id, user_id:r.user_id, fecha:iso(r.fecha), categoria:r.categoria, descripcion:r.descripcion, monto:Number(r.monto), created_at:iso(r.created_at) }; }
 function mapMovement(r){ return { id:r.id, tenant_id:r.tenant_id, product_id:r.product_id, type:r.type, qty:Number(r.qty), ref:r.ref, branch_id: r.branch_id!=null?Number(r.branch_id):null, created_at:iso(r.created_at) }; }
-function mapBranch(r){ return { id:r.id, tenant_id:r.tenant_id, name:r.name, address:r.address||'', phone:r.phone||'', status:r.status||'activo', created_at:iso(r.created_at) }; }
+function mapBranch(r){ return { id:r.id, tenant_id:r.tenant_id, name:r.name, address:r.address||'', phone:r.phone||'', status:r.status||'activo', fecha_inicio: r.fecha_inicio? (r.fecha_inicio instanceof Date? r.fecha_inicio.toISOString().slice(0,10): String(r.fecha_inicio).slice(0,10)) : null, plan_tipo:r.plan_tipo||null, plan_cost:Number(r.plan_cost)||0, vence: r.vence? (r.vence instanceof Date? r.vence.toISOString().slice(0,10): String(r.vence).slice(0,10)) : null, dias_restantes:diasRestantes(r.vence), created_at:iso(r.created_at) }; }
 function mapCustomer(r){ return { id:r.id, tenant_id:r.tenant_id, name:r.name, doc:r.doc||'', phone:r.phone||'', email:r.email||'', address:r.address||'', credit_limit:Number(r.credit_limit)||0, notes:r.notes||'', created_at:iso(r.created_at) }; }
 function mapReturn(r){ return { id:r.id, tenant_id:r.tenant_id, user_id:r.user_id, sale_id:r.sale_id, sale_numero:r.sale_numero, sale_pay_status:r.sale_pay_status, numero:r.numero, fecha:iso(r.fecha), motivo:r.motivo||'', subtotal:Number(r.subtotal), iva:Number(r.iva), total:Number(r.total), cash_session_id: r.cash_session_id!=null?Number(r.cash_session_id):null, items:r.items||[], created_at:iso(r.created_at) }; }
 function mapCashSession(r){ return { id:r.id, tenant_id:r.tenant_id, branch_id:r.branch_id, user_id:r.user_id, opened_at:iso(r.opened_at), opening_amount:Number(r.opening_amount)||0, closed_at: r.closed_at?iso(r.closed_at):null, counted_amount: r.counted_amount!=null?Number(r.counted_amount):null, expected_amount: r.expected_amount!=null?Number(r.expected_amount):null, difference: r.difference!=null?Number(r.difference):null, status:r.status||'abierta', notes:r.notes||'' }; }
@@ -408,12 +421,12 @@ const pgRepo = {
   async logAudit(e){ const r=await q(`INSERT INTO audit_log(actor_user_id,actor_name,actor_role,tenant_id,action,entity,entity_id,detail,ip) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[e.actor_user_id==null?null:Number(e.actor_user_id),e.actor_name||null,e.actor_role||null,e.tenant_id==null?null:Number(e.tenant_id),e.action,e.entity||null,e.entity_id==null?null:Number(e.entity_id),e.detail||null,e.ip||null]); return r.rows[0]; },
   async listAudit({ tenant_id=null, limit=200 }={}){ const lim=Math.max(1,Number(limit)||200); let r; if(tenant_id!=null) r=await q('SELECT * FROM audit_log WHERE tenant_id=$1 ORDER BY id DESC LIMIT $2',[Number(tenant_id),lim]); else r=await q('SELECT * FROM audit_log ORDER BY id DESC LIMIT $1',[lim]); return r.rows.map(x=>({ ...x, ts: x.ts instanceof Date? x.ts.toISOString(): x.ts })); },
   // Tenants
-  async createTenant(o){ const r=await q(`INSERT INTO tenants(name,code,nit,email,contacto,telefono,vence,fecha_inicio,plan,plan_tipo,plan_cost,logo) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,[o.name,(o.code||'').toUpperCase()||null,o.nit||'',o.email||null,o.contacto||null,o.telefono||null,o.vence||null,o.fecha_inicio||null,o.plan||null,o.plan_tipo||null,Number(o.plan_cost)||0,o.logo||null]); const t=mapTenant(r.rows[0]); await q(`INSERT INTO branches(tenant_id,name) VALUES($1,'Principal')`,[t.id]); return t; },
+  async createTenant(o){ const r=await q(`INSERT INTO tenants(name,code,nit,email,contacto,telefono,vence,fecha_inicio,fecha_creacion,plan,plan_tipo,plan_cost,logo) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,[o.name,(o.code||'').toUpperCase()||null,o.nit||'',o.email||null,o.contacto||null,o.telefono||null,o.vence||null,o.fecha_inicio||null,o.fecha_creacion||null,o.plan||null,o.plan_tipo||null,Number(o.plan_cost)||0,o.logo||null]); const t=mapTenant(r.rows[0]); await q(`INSERT INTO branches(tenant_id,name) VALUES($1,'Principal')`,[t.id]); return t; },
   async getTenant(id){ const r=await q('SELECT * FROM tenants WHERE id=$1',[Number(id)]); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async findTenantByCode(code){ const r=await q('SELECT * FROM tenants WHERE upper(code)=upper($1) LIMIT 1',[String(code||'')]); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async findTenantByName(name){ const r=await q('SELECT * FROM tenants WHERE lower(btrim(name))=lower(btrim($1)) LIMIT 1',[String(name||'')]); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async listTenants(){ try{ await q("UPDATE tenants SET status='inactivo' WHERE status='activo' AND vence IS NOT NULL AND vence < CURRENT_DATE"); }catch(e){} const t=await q('SELECT * FROM tenants ORDER BY id'); const uc=await q('SELECT tenant_id, COUNT(*) AS c FROM users WHERE tenant_id IS NOT NULL GROUP BY tenant_id'); const pc=await q('SELECT tenant_id, COUNT(*) AS c FROM products GROUP BY tenant_id'); const um={},pm={}; uc.rows.forEach(r=>{ um[r.tenant_id]=Number(r.c); }); pc.rows.forEach(r=>{ pm[r.tenant_id]=Number(r.c); }); return t.rows.map(x=>({ ...mapTenant(x), users:um[x.id]||0, products:pm[x.id]||0 })); },
-  async updateTenant(id,f){ const sets=[],vals=[]; let i=1; const fx={...f}; if(fx.code!==undefined) fx.code=(fx.code||'').toUpperCase()||null; if(fx.vence!==undefined) fx.vence=fx.vence||null; ['status','name','nit','email','contacto','telefono','vence','fecha_inicio','plan','plan_tipo','plan_cost','logo','code'].forEach(k=>{ if(fx[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(fx[k]); } }); if(!sets.length) return this.getTenant(id); vals.push(Number(id)); const r=await q(`UPDATE tenants SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,vals); return r.rows[0]?mapTenant(r.rows[0]):null; },
+  async updateTenant(id,f){ const sets=[],vals=[]; let i=1; const fx={...f}; if(fx.code!==undefined) fx.code=(fx.code||'').toUpperCase()||null; if(fx.vence!==undefined) fx.vence=fx.vence||null; ['status','name','nit','email','contacto','telefono','vence','fecha_inicio','fecha_creacion','plan','plan_tipo','plan_cost','logo','code'].forEach(k=>{ if(fx[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(fx[k]); } }); if(!sets.length) return this.getTenant(id); vals.push(Number(id)); const r=await q(`UPDATE tenants SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,vals); return r.rows[0]?mapTenant(r.rows[0]):null; },
   async deleteTenant(id){ const r=await q('DELETE FROM tenants WHERE id=$1',[Number(id)]); return r.rowCount>0; },
   // Users
   async createUser(o){ const r=await q(`INSERT INTO users(tenant_id,branch_id,name,username,email,role,password_hash,password_salt,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[o.tenant_id==null?null:Number(o.tenant_id),(o.branch_id==null||o.branch_id==='')?null:Number(o.branch_id),o.name,o.username||null,o.email||null,o.role||'tienda',o.password_hash,o.password_salt,o.status||'activo']); return r.rows[0]; },
@@ -558,10 +571,10 @@ const pgRepo = {
   async createUnit(tid,productId,imei,note){ const im=String(imei||'').trim(); if(!im) throw { code:'VALIDACION', message:'IMEI/serial obligatorio' }; const ex=await q('SELECT 1 FROM units WHERE tenant_id=$1 AND lower(btrim(imei))=lower(btrim($2)) LIMIT 1',[tid,im]); if(ex.rows[0]) throw { code:'IMEI_EXISTE', message:'Ese IMEI/serial ya está registrado' }; const r=await q(`INSERT INTO units(tenant_id,product_id,imei,status,note) VALUES($1,$2,$3,'disponible',$4) RETURNING *`,[tid,Number(productId),im,note||'']); return mapUnit(r.rows[0]); },
   async bajaUnit(id,tid){ const r0=await q('SELECT * FROM units WHERE id=$1 AND tenant_id=$2',[Number(id),tid]); const u=r0.rows[0]; if(!u) return null; if(u.status==='vendido') throw { code:'UNIDAD_VENDIDA', message:'No puedes dar de baja una unidad vendida' }; const r=await q("UPDATE units SET status='baja', updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING *",[Number(id),tid]); return mapUnit(r.rows[0]); },
   // Sucursales / stock por sucursal
-  async listBranches(tid){ const r=await q('SELECT * FROM branches WHERE tenant_id=$1 ORDER BY id',[tid]); return r.rows.map(mapBranch); },
+  async listBranches(tid){ try{ await q("UPDATE branches SET status='suspendida' WHERE tenant_id=$1 AND status='activo' AND vence IS NOT NULL AND vence < CURRENT_DATE",[tid]); }catch(e){} const r=await q('SELECT * FROM branches WHERE tenant_id=$1 ORDER BY id',[tid]); return r.rows.map(mapBranch); },
   async getBranch(id,tid){ const r=await q('SELECT * FROM branches WHERE id=$1 AND tenant_id=$2',[Number(id),tid]); return r.rows[0]?mapBranch(r.rows[0]):null; },
-  async createBranch(input,tid){ const r=await q(`INSERT INTO branches(tenant_id,name,address,phone) VALUES($1,$2,$3,$4) RETURNING *`,[tid,String(input.name).trim(),input.address||'',input.phone||'']); return mapBranch(r.rows[0]); },
-  async updateBranch(id,tid,input){ const sets=[],vals=[]; let i=1; ['name','address','phone','status'].forEach(k=>{ if(input[k]!==undefined){ sets.push(`${k}=$${i++}`); vals.push(input[k]); } }); if(!sets.length) return this.getBranch(id,tid); vals.push(Number(id)); vals.push(tid); const r=await q(`UPDATE branches SET ${sets.join(',')} WHERE id=$${i++} AND tenant_id=$${i} RETURNING *`,vals); return r.rows[0]?mapBranch(r.rows[0]):null; },
+  async createBranch(input,tid){ const tipo=input.plan_tipo||null; const ini=input.fecha_inicio||null; const vence=(planMonths(tipo)&&ini)?addMonths(ini,planMonths(tipo)):(input.vence||null); const r=await q(`INSERT INTO branches(tenant_id,name,address,phone,fecha_inicio,plan_tipo,plan_cost,vence) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[tid,String(input.name).trim(),input.address||'',input.phone||'',ini,tipo,Number(input.plan_cost)||0,vence]); return mapBranch(r.rows[0]); },
+  async updateBranch(id,tid,input){ const cur=await this.getBranch(id,tid); if(!cur) return null; const merged={ name:input.name!==undefined?input.name:cur.name, address:input.address!==undefined?input.address:cur.address, phone:input.phone!==undefined?input.phone:cur.phone, status:input.status!==undefined?input.status:cur.status, fecha_inicio:input.fecha_inicio!==undefined?(input.fecha_inicio||null):cur.fecha_inicio, plan_tipo:input.plan_tipo!==undefined?(input.plan_tipo||null):cur.plan_tipo, plan_cost:input.plan_cost!==undefined?(Number(input.plan_cost)||0):cur.plan_cost, vence:input.vence!==undefined?(input.vence||null):cur.vence }; const m=planMonths(merged.plan_tipo); if(m && merged.fecha_inicio && input.vence===undefined && (input.plan_tipo!==undefined||input.fecha_inicio!==undefined)) merged.vence=addMonths(merged.fecha_inicio,m); const r=await q(`UPDATE branches SET name=$1,address=$2,phone=$3,status=$4,fecha_inicio=$5,plan_tipo=$6,plan_cost=$7,vence=$8 WHERE id=$9 AND tenant_id=$10 RETURNING *`,[merged.name,merged.address,merged.phone,merged.status,merged.fecha_inicio,merged.plan_tipo,merged.plan_cost,merged.vence,Number(id),tid]); return r.rows[0]?mapBranch(r.rows[0]):null; },
   async deleteBranch(id,tid){ const bid=Number(id); const cnt=await q('SELECT COUNT(*) AS c FROM branches WHERE tenant_id=$1',[tid]); if(Number(cnt.rows[0].c)<=1) throw { code:'ULTIMA_SUCURSAL', message:'No puedes eliminar la única sucursal' }; const st=await q('SELECT COALESCE(SUM(qty),0) AS s FROM branch_stock WHERE branch_id=$1',[bid]); if(Number(st.rows[0].s)>0) throw { code:'SUCURSAL_CON_STOCK', message:'La sucursal tiene stock; trasládalo o ajústalo antes de eliminar' }; const r=await q('DELETE FROM branches WHERE id=$1 AND tenant_id=$2',[bid,tid]); await q('DELETE FROM branch_stock WHERE branch_id=$1',[bid]); return r.rowCount>0; },
   async defaultBranchId(tid){ const r=await q('SELECT id FROM branches WHERE tenant_id=$1 ORDER BY id LIMIT 1',[tid]); if(r.rows[0]) return r.rows[0].id; const ins=await q(`INSERT INTO branches(tenant_id,name) VALUES($1,'Principal') RETURNING id`,[tid]); return ins.rows[0].id; },
   async productStock(tid,productId){ const r=await q('SELECT s.branch_id, b.name AS branch_name, s.qty FROM branch_stock s JOIN branches b ON b.id=s.branch_id WHERE s.tenant_id=$1 AND s.product_id=$2 ORDER BY s.branch_id',[tid,Number(productId)]); return r.rows.map(x=>({ branch_id:x.branch_id, branch_name:x.branch_name, qty:Number(x.qty) })); },
@@ -573,11 +586,15 @@ const pgRepo = {
   async closeCashSession(id,tid,counted,notes){ const r0=await q('SELECT * FROM cash_sessions WHERE id=$1 AND tenant_id=$2',[Number(id),tid]); const s=r0.rows[0]; if(!s) return null; if(s.status!=='abierta') throw { code:'CAJA_CERRADA', message:'La caja ya está cerrada' }; const ci=await q("SELECT COALESCE(SUM(total),0) AS s FROM sales WHERE cash_session_id=$1 AND pay_method='efectivo' AND pay_status<>'credito'",[s.id]); const co=await q("SELECT COALESCE(SUM(total),0) AS s FROM returns WHERE cash_session_id=$1 AND sale_pay_status<>'credito'",[s.id]); const expected=Number(s.opening_amount)+Number(ci.rows[0].s)-Number(co.rows[0].s); const cnt=Number(counted)||0; const r=await q("UPDATE cash_sessions SET counted_amount=$1, expected_amount=$2, difference=$3, closed_at=now(), status='cerrada', notes=$4 WHERE id=$5 RETURNING *",[cnt,expected,cnt-expected,notes||'',s.id]); return mapCashSession(r.rows[0]); },
   async cashSessionSummary(s){ const ci=await q("SELECT COALESCE(SUM(total),0) AS s FROM sales WHERE cash_session_id=$1 AND pay_method='efectivo' AND pay_status<>'credito'",[s.id]); const av=await q('SELECT COUNT(*) AS c FROM sales WHERE cash_session_id=$1',[s.id]); const co=await q("SELECT COALESCE(SUM(total),0) AS s FROM returns WHERE cash_session_id=$1 AND sale_pay_status<>'credito'",[s.id]); const cashIn=Number(ci.rows[0].s), cashOut=Number(co.rows[0].s); return { cashIn, cashOut, ventas:Number(av.rows[0].c), expected:Number(s.opening_amount)+cashIn-cashOut }; },
   // Facturas de servicio (suscripción)
-  async createServiceInvoice(o){ const r=await q(`INSERT INTO service_invoices(tenant_id,numero,plan,amount,due_date,status,email_to,sent) VALUES($1,'TMP',$2,$3,$4,$5,$6,$7) RETURNING *`,[Number(o.tenant_id),o.plan||null,Number(o.amount)||0,o.due_date||null,o.status||'activo',o.email_to||null,o.sent?1:0]); const inv=r.rows[0]; const numero='SVC-'+String(inv.id).padStart(5,'0'); await q('UPDATE service_invoices SET numero=$1 WHERE id=$2',[numero,inv.id]); inv.numero=numero; return mapServiceInvoice(inv); },
+  async createServiceInvoice(o){ const r=await q(`INSERT INTO service_invoices(tenant_id,branch_id,numero,plan,periodo,amount,issued_at,due_date,status,email_to,sent) VALUES($1,$2,'TMP',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[Number(o.tenant_id),o.branch_id!=null?Number(o.branch_id):null,o.plan||null,o.periodo||o.plan||null,Number(o.amount)||0,o.issued_at!==undefined?o.issued_at:new Date().toISOString(),o.due_date||null,o.status||'pendiente',o.email_to||null,o.sent?1:0]); const inv=r.rows[0]; const numero='SVC-'+String(inv.id).padStart(5,'0'); await q('UPDATE service_invoices SET numero=$1 WHERE id=$2',[numero,inv.id]); inv.numero=numero; return mapServiceInvoice(inv); },
   async listServiceInvoices(tid){ let r; if(tid!=null) r=await q('SELECT * FROM service_invoices WHERE tenant_id=$1 ORDER BY id DESC',[Number(tid)]); else r=await q('SELECT * FROM service_invoices ORDER BY id DESC'); return r.rows.map(mapServiceInvoice); },
   async markInvoiceSent(id){ await q('UPDATE service_invoices SET sent=1 WHERE id=$1',[Number(id)]); },
   async getServiceInvoice(id){ const r=await q('SELECT * FROM service_invoices WHERE id=$1',[Number(id)]); return r.rows[0]?mapServiceInvoice(r.rows[0]):null; },
   async deleteServiceInvoice(id){ const r=await q('DELETE FROM service_invoices WHERE id=$1',[Number(id)]); return r.rowCount>0; },
+  async listPendingInvoices(){ const r=await q("SELECT si.*, t.name AS tenant_name, b.name AS branch_name FROM service_invoices si LEFT JOIN tenants t ON t.id=si.tenant_id LEFT JOIN branches b ON b.id=si.branch_id WHERE si.status='pendiente' ORDER BY si.id DESC"); return r.rows.map(x=>({ ...mapServiceInvoice(x), tenant_name:x.tenant_name||null, branch_name:x.branch_name||null })); },
+  async branchesForBilling(){ const r=await q("SELECT id,tenant_id,plan_tipo,plan_cost,vence,status FROM branches WHERE plan_tipo IS NOT NULL AND vence IS NOT NULL"); return r.rows.map(x=>({ id:x.id, tenant_id:x.tenant_id, plan_tipo:x.plan_tipo, plan_cost:Number(x.plan_cost)||0, vence:(x.vence instanceof Date?x.vence.toISOString().slice(0,10):String(x.vence).slice(0,10)), status:x.status, dias_restantes:diasRestantes(x.vence) })); },
+  async pendingInvoiceFor(branchId,dueDate){ const r=await q("SELECT * FROM service_invoices WHERE branch_id=$1 AND status='pendiente' AND due_date=$2 LIMIT 1",[Number(branchId),dueDate]); return r.rows[0]?mapServiceInvoice(r.rows[0]):null; },
+  async markInvoicePaid(id){ const r=await q("UPDATE service_invoices SET status='pagada', issued_at=now() WHERE id=$1 RETURNING *",[Number(id)]); return r.rows[0]?mapServiceInvoice(r.rows[0]):null; },
   async createReturn(input,tid,userId){
     const client=await pool.connect();
     try{
@@ -677,6 +694,8 @@ async function init(){
         await q(`INSERT INTO branches(tenant_id,name) SELECT id,'Principal' FROM tenants t WHERE NOT EXISTS(SELECT 1 FROM branches b WHERE b.tenant_id=t.id)`);
         await q(`INSERT INTO branch_stock(tenant_id,product_id,branch_id,qty) SELECT p.tenant_id, p.id, (SELECT min(id) FROM branches b WHERE b.tenant_id=p.tenant_id), p.stock FROM products p WHERE NOT EXISTS(SELECT 1 FROM branch_stock s WHERE s.product_id=p.id)`);
       }catch(e){ console.error('Reconcile sucursales:', e.message); }
+      // Normaliza el perfil principal: "Súper Admin" -> "Soporte"
+      try{ await q("UPDATE users SET name='Soporte', username='Soporte' WHERE role='superadmin' AND (name='Súper Admin' OR username='Súper Admin')"); }catch(e){ console.error('Normaliza Soporte:', e.message); }
       if(!global.__TEST_PG_POOL__){
         for(const stmt of rlsStatements()){ try{ await q(stmt); }catch(e){ console.error('RLS:', e.message); } }
         RLS_ON = true;
@@ -731,6 +750,18 @@ async function emitirFacturaServicio(tenant){
   }
   return inv;
 }
+// Revisión de vigencia: genera factura PENDIENTE para sedes con 5 días o menos
+async function runBillingCheck(){
+  try{ await runElevated(async()=>{
+    const list=await repo.branchesForBilling();
+    for(const b of list){
+      if(b.status==='activo' && b.dias_restantes!=null && b.dias_restantes<=5){
+        const ex=await repo.pendingInvoiceFor(b.id, b.vence);
+        if(!ex){ const t=await repo.getTenant(b.tenant_id); await repo.createServiceInvoice({ tenant_id:b.tenant_id, branch_id:b.id, plan:b.plan_tipo, periodo:b.plan_tipo, amount:b.plan_cost, due_date:b.vence, status:'pendiente', issued_at:null, email_to:t&&t.email }); }
+      }
+    }
+  }); }catch(e){ console.error('Billing check:', e.message); }
+}
 async function newUser(b){ const hp=hashPw(b.password||'changeme'); const username=String(b.username||'').trim(); return repo.createUser({ tenant_id: b.role==='superadmin'?null:Number(b.tenant_id), branch_id: b.role==='superadmin'?null:(b.branch_id||null), name:(b.name&&b.name.trim())||username, username, email:b.email||null, role:b.role||'tienda', password_hash:hp.hash, password_salt:hp.salt, status:'activo' }); }
 // Verifica la contraseña del usuario en sesión (confirmación de acciones sensibles)
 function confirmPw(req){ return verifyPw(String((req.body&&req.body.confirm_password)||''), req.user.password_hash, req.user.password_salt); }
@@ -752,15 +783,17 @@ async function authMw(req,res,next){
     const u = t ? await runElevated(()=>repo.sessionUser(t)) : null;
     if(!u||u.status!=='activo') return res.status(401).json({ error:{ code:'NO_AUTH', message:'Sesión inválida o expirada' } });
     req.user=u;
-    // D2: el plan de la empresa se verifica en CADA petición (no solo al iniciar sesión)
+    // Empresa inactiva (suspensión manual) bloquea a todos; sede vencida/suspendida bloquea a sus usuarios
     if(u.role!=='superadmin' && u.tenant_id!=null){
       const tenant = await runElevated(()=>repo.getTenant(u.tenant_id));
-      if(tenant){
-        const expired = tenant.vence && new Date().toISOString().slice(0,10) > tenant.vence;
-        if(expired && tenant.status==='activo'){ try{ await runElevated(()=>repo.updateTenant(tenant.id,{ status:'inactivo' })); }catch(e){} }
-        if(expired || tenant.status!=='activo'){
-          try{ await repo.deleteSession(t); }catch(e){}   // invalida el token al vencer/desactivar
-          return res.status(403).json({ error:{ code: expired?'EMPRESA_VENCIDA':'EMPRESA_INACTIVA', message: expired?'El plan de la empresa venció. Contacta al proveedor.':'La empresa está inactiva' } });
+      if(tenant && tenant.status!=='activo'){ try{ await repo.deleteSession(t); }catch(e){} return res.status(403).json({ error:{ code:'EMPRESA_INACTIVA', message:'La empresa está inactiva' } }); }
+      if(u.branch_id){
+        const today=new Date().toISOString().slice(0,10);
+        const b=await runElevated(()=>repo.getBranch(u.branch_id, u.tenant_id));
+        if(b){
+          const expired = b.vence && today > String(b.vence).slice(0,10);
+          if(expired && b.status==='activo'){ try{ await runElevated(()=>repo.updateBranch(b.id, u.tenant_id, { status:'suspendida' })); }catch(e){} }
+          if(expired || b.status!=='activo'){ try{ await repo.deleteSession(t); }catch(e){} return res.status(403).json({ error:{ code:'SEDE_SUSPENDIDA', message:'La sede está suspendida por falta de pago. Contacta al proveedor.' } }); }
         }
       }
     }
@@ -916,12 +949,11 @@ api.post('/auth/login', h((req,res)=>runElevated(async()=>{
   if(!u || u.status!=='activo' || !verifyPw(password,u.password_hash,u.password_salt)) return fail();
   if(emp.toLowerCase()==='nexu' && u.role!=='superadmin') return fail();
   // Credenciales válidas: recién aquí se revela el estado de la empresa (evita enumeración)
-  if(tenant){
-    if(tenant.vence && new Date().toISOString().slice(0,10) > tenant.vence){
-      if(tenant.status==='activo') await repo.updateTenant(tenant.id,{ status:'inactivo' });
-      return res.status(403).json({ error:{ code:'EMPRESA_VENCIDA', message:'El plan de la empresa venció. Contacta al proveedor.' } });
-    }
-    if(tenant.status!=='activo') return res.status(403).json({ error:{ code:'EMPRESA_INACTIVA', message:'La empresa está inactiva' } });
+  if(tenant && tenant.status!=='activo') return res.status(403).json({ error:{ code:'EMPRESA_INACTIVA', message:'La empresa está inactiva' } });
+  if(u.branch_id){
+    const today=new Date().toISOString().slice(0,10);
+    const b=await repo.getBranch(u.branch_id, tenant?tenant.id:u.tenant_id);
+    if(b){ const expired=b.vence && today>String(b.vence).slice(0,10); if(expired||b.status!=='activo') return res.status(403).json({ error:{ code:'SEDE_SUSPENDIDA', message:'La sede está suspendida por falta de pago.' } }); }
   }
   loginOk(key);
   try{ await repo.setLastLogin(u.id); }catch(e){}
@@ -973,7 +1005,7 @@ api.post('/tenants', authMw, superMw, h(async (req,res)=>{
   if(await repo.findTenantByName(name)) return res.status(409).json({ error:{ code:'NOMBRE_EXISTE', message:'Ya existe una empresa con ese nombre' } });
   if(b.logo && String(b.logo).length>900000) return res.status(400).json({ error:{ code:'LOGO_GRANDE', message:'El logo es muy pesado (usa una imagen más liviana)' } });
   const venceCalc=computeVence(b);
-  const created=await repo.createTenant({ name, nit:b.nit||'', email:b.email||null, contacto:b.contacto||null, telefono:b.telefono||null, fecha_inicio:b.fecha_inicio||null, vence:(venceCalc!=null?venceCalc:(b.vence||null)), plan:b.plan||null, plan_tipo:b.plan_tipo||null, plan_cost:b.plan_cost||0, logo:b.logo||null });
+  const created=await repo.createTenant({ name, nit:b.nit||'', email:b.email||null, contacto:b.contacto||null, telefono:b.telefono||null, fecha_inicio:b.fecha_inicio||null, fecha_creacion:b.fecha_creacion||null, vence:(venceCalc!=null?venceCalc:(b.vence||null)), plan:b.plan||null, plan_tipo:b.plan_tipo||null, plan_cost:b.plan_cost||0, logo:b.logo||null });
   logAction(req,'tenant_create',{ entity:'tenant', entity_id:created.id, detail:{ name, plan:created.plan, plan_cost:created.plan_cost } });
   let factura=null; try{ factura=await emitirFacturaServicio(created); logAction(req,'service_invoice',{ entity:'tenant', entity_id:created.id, detail:{ numero:factura.numero, amount:factura.amount } }); }catch(e){ console.error('Factura servicio:', e.message); }
   res.status(201).json({ ...created, factura });
@@ -990,7 +1022,7 @@ api.patch('/tenants/:id', authMw, superMw, h(async (req,res)=>{
     if(name.trim().toLowerCase()!==String(cur.name).trim().toLowerCase()){ const dup=await repo.findTenantByName(name); if(dup && dup.id!==cur.id) return res.status(409).json({ error:{ code:'NOMBRE_EXISTE', message:'Ya existe una empresa con ese nombre' } }); }
   }
   if(b.logo && String(b.logo).length>900000) return res.status(400).json({ error:{ code:'LOGO_GRANDE', message:'El logo es muy pesado' } });
-  const f={}; ['name','nit','email','contacto','telefono','vence','fecha_inicio','plan','plan_tipo','plan_cost','logo','status'].forEach(k=>{ if(b[k]!==undefined) f[k]=b[k]; });
+  const f={}; ['name','nit','email','contacto','telefono','vence','fecha_inicio','fecha_creacion','plan','plan_tipo','plan_cost','logo','status'].forEach(k=>{ if(b[k]!==undefined) f[k]=b[k]; });
   const venceCalc=computeVence(b); if(venceCalc!=null) f.vence=venceCalc;
   const t=await repo.updateTenant(req.params.id, f);
   logAction(req,'tenant_update',{ entity:'tenant', entity_id:Number(req.params.id), detail:{ fields:Object.keys(f) } });
@@ -1046,6 +1078,42 @@ api.post('/tenants/:id/pay', authMw, superMw, h(async (req,res)=>{
   res.status(201).json({ tenant:updated, recibo });
 }));
 api.get('/pay-info', authMw, superMw, h(async (req,res)=>res.json({ bank:process.env.PAY_BANK||'', account:process.env.PAY_ACCOUNT||'', holder:process.env.PAY_HOLDER||'', info:process.env.PAY_INFO||'' })));
+// Facturas pendientes (todas las sedes) — corre la revisión de vigencia primero
+api.get('/invoices/pending', authMw, superMw, h(async (req,res)=>{ try{ await runBillingCheck(); }catch(e){} res.json(await repo.listPendingInvoices()); }));
+// Registrar pago de una factura pendiente: marca pagada, reactiva y extiende la sede
+api.post('/invoices/:id/pay', authMw, superMw, h(async (req,res)=>{
+  const inv=await repo.getServiceInvoice(req.params.id);
+  if(!inv) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Factura no encontrada' } });
+  if(inv.status==='pagada') return res.status(409).json({ error:{ code:'YA_PAGADA', message:'La factura ya está pagada' } });
+  const branch=inv.branch_id!=null?await repo.getBranch(inv.branch_id, inv.tenant_id):null;
+  let updatedBranch=null;
+  if(branch){
+    const months=planMonths(branch.plan_tipo)||planMonths(inv.periodo);
+    const today=new Date().toISOString().slice(0,10);
+    const vigente=branch.vence && String(branch.vence).slice(0,10)>today;
+    const newVence= months? addMonths(vigente?String(branch.vence).slice(0,10):today, months) : branch.vence;
+    updatedBranch=await repo.updateBranch(branch.id, inv.tenant_id, { status:'activo', vence:newVence, fecha_inicio: vigente?branch.fecha_inicio:today });
+  }
+  const paid=await repo.markInvoicePaid(inv.id);
+  logAction(req,'invoice_pay',{ entity:'branch', entity_id:branch?branch.id:null, detail:{ invoice:inv.numero, vence:updatedBranch?updatedBranch.vence:null } });
+  res.json({ branch:updatedBranch, invoice:paid });
+}));
+// Registrar pago manual de una sede (genera recibo pagado y extiende)
+api.post('/tenants/:id/branches/:bid/pay', authMw, superMw, h(async (req,res)=>{
+  const tid=Number(req.params.id);
+  const branch=await repo.getBranch(req.params.bid, tid);
+  if(!branch) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Sede no encontrada' } });
+  const months=planMonths(branch.plan_tipo);
+  if(!months) return res.status(400).json({ error:{ code:'SIN_TIPO', message:'Configura el tipo de plan de la sede antes de registrar el pago' } });
+  const today=new Date().toISOString().slice(0,10);
+  const vigente=branch.vence && String(branch.vence).slice(0,10)>today;
+  const newVence=addMonths(vigente?String(branch.vence).slice(0,10):today, months);
+  const updatedBranch=await repo.updateBranch(branch.id, tid, { status:'activo', vence:newVence, fecha_inicio: vigente?branch.fecha_inicio:today });
+  const t=await repo.getTenant(tid);
+  const recibo=await repo.createServiceInvoice({ tenant_id:tid, branch_id:branch.id, plan:branch.plan_tipo, periodo:branch.plan_tipo, amount:branch.plan_cost, due_date:newVence, status:'pagada', email_to:t&&t.email });
+  logAction(req,'invoice_pay',{ entity:'branch', entity_id:branch.id, detail:{ amount:branch.plan_cost, vence:newVence } });
+  res.status(201).json({ branch:updatedBranch, recibo });
+}));
 api.post('/tenants/:id/bill/send', authMw, superMw, h(async (req,res)=>{ const t=await repo.getTenant(req.params.id); if(!t) return res.status(404).json({ error:{ code:'NO_EXISTE', message:'Empresa no encontrada' } }); if(!t.email) return res.status(400).json({ error:{ code:'SIN_CORREO', message:'La empresa no tiene correo registrado' } }); const body=['Factura de servicio - '+t.name,'Valor a pagar: '+(t.plan_cost||0),'','Datos para realizar el pago:','Banco / entidad: '+(process.env.PAY_BANK||'—'),'Número de cuenta: '+(process.env.PAY_ACCOUNT||'—'),'Titular: '+(process.env.PAY_HOLDER||'—'),(process.env.PAY_INFO||'')].join('\n'); const r=await sendEmail(t.email, 'Factura de servicio - '+t.name, body); logAction(req,'bill_send',{ entity:'tenant', entity_id:Number(req.params.id), detail:{ sent:!!r.sent } }); res.json({ sent:!!r.sent, reason:r.reason||null }); }));
 api.get('/users', authMw, superMw, h(async (req,res)=>res.json(await repo.listUsers())));
 api.post('/users', authMw, superMw, h(async (req,res)=>{
@@ -1198,7 +1266,10 @@ async function start(){
     console.error('FATAL: NODE_ENV=production sin DATABASE_URL. El modo archivo JSON no tiene RLS y pierde datos; no es válido en producción. Configura DATABASE_URL.');
     process.exit(1);
   }
-  await init(); const PORT=process.env.PORT||3000; app.listen(PORT, ()=>console.log('Nexo Retail escuchando en http://localhost:'+PORT));
+  await init();
+  try{ await runBillingCheck(); }catch(e){}
+  const _bc=setInterval(()=>{ runBillingCheck().catch(()=>{}); }, 24*3600*1000); if(_bc.unref) _bc.unref();
+  const PORT=process.env.PORT||3000; app.listen(PORT, ()=>console.log('Nexo Retail escuchando en http://localhost:'+PORT));
 }
 if(require.main === module){ start().catch(e=>{ console.error('Error al arrancar:', e); process.exit(1); }); }
 module.exports = { app, init, start, getRepo:()=>repo, buildReport, buildFinance, buildInsights };
